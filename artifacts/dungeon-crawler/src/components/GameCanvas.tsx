@@ -310,6 +310,7 @@ function getActions(
     actions.push(equippedSlot ? 'Unequip' : 'Equip');
   }
   actions.push('Drop');
+  actions.push('Cancel');
   return actions;
 }
 
@@ -373,6 +374,7 @@ function InventoryOverlay({
           if (action === 'Equip' && selectedItemId)   { onEquip(selectedItemId);   setActionCursor(null); }
           if (action === 'Unequip' && equippedSlot)   { onUnequip(equippedSlot);   setActionCursor(null); }
           if (action === 'Drop' && selectedItemId)     { onDrop(selectedItemId);    setActionCursor(null); }
+          if (action === 'Cancel')                     { setActionCursor(null); }
         }
       } else {
         // ── Browse mode ──
@@ -527,6 +529,7 @@ function InventoryOverlay({
                           if (action === 'Equip'   && selectedItemId) { onEquip(selectedItemId);   setActionCursor(null); }
                           if (action === 'Unequip' && equippedSlot)   { onUnequip(equippedSlot);   setActionCursor(null); }
                           if (action === 'Drop'    && selectedItemId) { onDrop(selectedItemId);     setActionCursor(null); }
+                          if (action === 'Cancel')                    { setActionCursor(null); }
                         }}
                         style={{
                           padding: '6px 8px', cursor: 'pointer',
