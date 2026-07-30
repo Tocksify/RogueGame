@@ -1,0 +1,540 @@
+function renderInventory(ctx: CanvasRenderingContext2D, state: GameStateData) {
+  if (state.inventoryPage === 0) { renderEquipmentPanel(ctx, state); return; }
+  renderItemsList(ctx, state);
+}
+
+// ── Page 0: Equipment paperdoll panel ──────────────────────────────
+function renderEquipmentPanel(ctx: CanvasRenderingContext2D, state: GameStateData) {
+  ctx.fillStyle = 'rgba(0,0,0,0.93)'; ctx.fillRect(0, 0, W, H);
+  pixelBox(ctx, 8, 16, W - 16, H - 32, C.black, C.white, 3);
+
+  // ── Tab bar ──
+  ctx.font = 'bold 13px monospace'; ctx.textAlign = 'left';
+  // Equipment tab (active)
+  ctx.fillStyle = C.white;
+  ctx.fillText('[ EQUIPMENT ]', 22, 42);
+  ctx.fillStyle = '#3a3a3a';
+  ctx.fillText('[ ALL ITEMS ]', 170, 42);
+  ctx.fillStyle = C.dim; ctx.font = '10px monospace'; ctx.textAlign = 'right';
+  ctx.fillText('[Q / Tab] switch', W - 18, 42);
+  ctx.strokeStyle = '#282828'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(12, 50); ctx.lineTo(W - 12, 50); ctx.stroke();
+
+  // ── Layout constants ──
+  const LEFT_X   = 14;
+  const DIV_X    = 360;
+  const RIGHT_CX = 564;           // centre of the right panel
+  const LIST_TOP = 60;
+  const ROW_H    = 30;
+
+  // ── Character silhouette ──
+  const CY = 76;                  // top of silhouette
+  const CX = RIGHT_CX;
+
+  type Rect = [number, number, number, number];
+  // Silhouette rects (in draw order, back to front)
+  const S_HEAD:      Rect = [CX - 24, CY,       48,  44];
+  const S_NECK:      Rect = [CX - 10, CY + 44,  20,  12];
+  const S_SHOULDER:  Rect = [CX - 52, CY + 56, 104,  24];
+  const S_L_ARM:     Rect = [CX - 68, CY + 56,  16,  68];
+  const S_R_ARM:     Rect = [CX + 52, CY + 56,  16,  68];
+  const S_TORSO:     Rect = [CX - 30, CY + 80,  60,  70];
+  const S_L_HAND:    Rect = [CX - 72, CY + 124, 20,  22];
+  const S_R_HAND:    Rect = [CX + 52, CY + 124, 20,  22];
+  const S_BELT:      Rect = [CX - 30, CY + 150, 60,  16];
+  const S_L_LEG:     Rect = [CX - 28, CY + 166, 22,  80];
+  const S_R_LEG:     Rect = [CX + 6,  CY + 166, 22,  80];
+  const S_L_FOOT:    Rect = [CX - 32, CY + 246, 28,  18];
+  const S_R_FOOT:    Rect = [CX + 4,  CY + 246, 28,  18];
+
+  // Slot → body rects to highlight
+  const SLOT_RECTS: Record<string, Rect[]> = {
+    helmet:   [S_HEAD],
+    necklace: [S_NECK],
+    armor:    [S_TORSO],
+    cloak:    [S_TORSO, S_L_ARM, S_R_ARM],
+    gloves:   [S_L_HAND, S_R_HAND],
+    belt:     [S_BELT],
+    pants:    [S_L_LEG, S_R_LEG],
+    boots:    [S_L_FOOT, S_R_FOOT],
+    weapon:   [S_R_ARM, S_R_HAND],
+    offhand:  [S_L_ARM, S_L_HAND],
+    ring1:    [S_R_HAND],
+    ring2:    [S_L_HAND],
+    trinket:  [S_BELT],
+  };
+  // Body part centre for connector lines
+  const SLOT_CENTERS: Record<string, [number, number]> = {
+    helmet:   [CX,      CY + 22],
+    necklace: [CX,      CY + 50],
+    armor:    [CX,      CY + 115],
+    cloak:    [CX + 12, CY + 115],
+    gloves:   [CX + 62, CY + 135],
+    belt:     [CX,      CY + 158],
+    pants:    [CX,      CY + 206],
+    boots:    [CX,      CY + 255],
+    weapon:   [CX + 62, CY + 90],
+    offhand:  [CX - 62, CY + 90],
+    ring1:    [CX + 68, CY + 148],
+    ring2:    [CX - 68, CY + 148],
+    trinket:  [CX,      CY + 170],
+  };
+
+  // Determine which slot is "active" for highlighting
+  const activeCursor = state.equipPanelCursor;
+  const activeSlotId = EQUIP_SLOTS[activeCursor]?.id ?? '';
+  const inMenu       = state.equipSlotMenu !== null;
+
+  // Draw full silhouette in base colour
+  const allRects: Rect[] = [
+    S_HEAD, S_NECK, S_SHOULDER, S_L_ARM, S_R_ARM,
+    S_TORSO, S_L_HAND, S_R_HAND, S_BELT,
+    S_L_LEG, S_R_LEG, S_L_FOOT, S_R_FOOT,
+  ];
+  const eq = state.player.equipment as Record<string, string | null>;
+
+  ctx.fillStyle = '#151515';
+  for (const [rx, ry, rw, rh] of allRects) ctx.fillRect(rx, ry, rw, rh);
+
+  // Tint body parts that have items equipped
+  for (const slot of EQUIP_SLOTS) {
+    if (!eq[slot.id]) continue;
+    const rects = SLOT_RECTS[slot.id];
+    if (!rects) continue;
+    ctx.fillStyle = slot.id === activeSlotId ? '#224466' : '#282830';
+    for (const [rx, ry, rw, rh] of rects) ctx.fillRect(rx, ry, rw, rh);
+  }
+
+  // Highlight selected-slot body parts
+  if (!inMenu && SLOT_RECTS[activeSlotId]) {
+    for (const [rx, ry, rw, rh] of SLOT_RECTS[activeSlotId]) {
+      ctx.fillStyle = '#1e3a55'; ctx.fillRect(rx, ry, rw, rh);
+      ctx.strokeStyle = '#5599cc'; ctx.lineWidth = 1;
+      ctx.strokeRect(rx - 1, ry - 1, rw + 2, rh + 2);
+    }
+  }
+
+  // Small slot abbreviation labels on the silhouette
+  const ABBREV: Record<string, string> = {
+    helmet:'H', necklace:'N', armor:'C', cloak:'CL',
+    gloves:'G', belt:'BL', pants:'P', boots:'BT',
+    weapon:'W', offhand:'OH', ring1:'R1', ring2:'R2', trinket:'T',
+  };
+  ctx.font = '7px monospace'; ctx.textAlign = 'center';
+  for (const slot of EQUIP_SLOTS) {
+    const ctr = SLOT_CENTERS[slot.id];
+    if (!ctr) continue;
+    const hasItem = !!eq[slot.id];
+    ctx.fillStyle = hasItem ? '#4477aa' : '#252535';
+    ctx.fillText(ABBREV[slot.id] ?? slot.id, ctr[0], ctr[1] + 3);
+  }
+
+  // ── Slot list (left panel) ──
+  for (let i = 0; i < EQUIP_SLOTS.length; i++) {
+    const slot    = EQUIP_SLOTS[i];
+    const rowY    = LIST_TOP + i * ROW_H;
+    const isSel   = activeCursor === i && !inMenu;
+    const itemId  = eq[slot.id];
+    const item    = itemId ? ITEMS[itemId] : null;
+
+    if (isSel) {
+      ctx.fillStyle = '#0c1c2c';
+      ctx.fillRect(LEFT_X, rowY + 1, DIV_X - LEFT_X - 4, ROW_H - 2);
+    }
+
+    // Cursor
+    ctx.font = isSel ? 'bold 12px monospace' : '12px monospace';
+    ctx.fillStyle = isSel ? '#5599cc' : C.dim; ctx.textAlign = 'left';
+    ctx.fillText(isSel ? '►' : ' ', LEFT_X + 2, rowY + 19);
+
+    // Slot label
+    ctx.fillStyle = isSel ? C.white : '#606070';
+    ctx.fillText(slot.label, LEFT_X + 16, rowY + 19);
+
+    // Item name or (empty)
+    if (item) {
+      ctx.font = isSel ? 'bold 11px monospace' : '11px monospace';
+      const tc = TIER_COLOR[item.tier] ?? C.gray;
+      ctx.fillStyle = (item.tier === 'common' || item.tier === 'uncommon') ? (isSel ? C.white : C.silver) : tc;
+      let nameStr = item.name;
+      ctx.textAlign = 'left';
+      while (ctx.measureText(nameStr).width > 162 && nameStr.length > 3) nameStr = nameStr.slice(0, -2) + '…';
+      ctx.fillText(nameStr, LEFT_X + 92, rowY + 19);
+    } else {
+      ctx.font = '10px monospace'; ctx.fillStyle = '#252535'; ctx.textAlign = 'left';
+      ctx.fillText('—', LEFT_X + 92, rowY + 19);
+    }
+
+    // Arrow + dotted connector to silhouette (selected row only)
+    if (isSel) {
+      ctx.fillStyle = '#3366aa'; ctx.font = '11px monospace'; ctx.textAlign = 'left';
+      ctx.fillText('→', DIV_X - 14, rowY + 19);
+      const ctr = SLOT_CENTERS[slot.id];
+      if (ctr) {
+        ctx.save();
+        ctx.setLineDash([3, 5]);
+        ctx.strokeStyle = '#1e3355'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(DIV_X + 2, rowY + 13);
+        ctx.lineTo(ctr[0], ctr[1]);
+        ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle = '#4488bb';
+        ctx.beginPath(); ctx.arc(ctr[0], ctr[1], 3, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
+  // Vertical divider
+  ctx.strokeStyle = '#1a2030'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(DIV_X, 54); ctx.lineTo(DIV_X, H - 34); ctx.stroke();
+
+  // ── Right panel: action/pick menu OR info below silhouette ──
+  const RPANEL_X = DIV_X + 8;
+
+  if (inMenu && state.equipSlotMenu) {
+    const menu   = state.equipSlotMenu;
+    const mslot  = EQUIP_SLOTS.find(s => s.id === menu.slotId);
+    if (mslot) {
+      const eqId   = eq[mslot.id];
+      const eqItem = eqId ? ITEMS[eqId] : null;
+      // Slot title
+      ctx.font = 'bold 13px monospace'; ctx.fillStyle = '#5599cc'; ctx.textAlign = 'left';
+      ctx.fillText(mslot.label, RPANEL_X, 70);
+      if (eqItem) {
+        ctx.font = '11px monospace';
+        ctx.fillStyle = TIER_COLOR[eqItem.tier] ?? C.silver;
+        ctx.fillText(eqItem.name, RPANEL_X, 86);
+      }
+      ctx.strokeStyle = '#1a2433'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(RPANEL_X, 92); ctx.lineTo(W - 14, 92); ctx.stroke();
+
+      if (menu.mode === 'actions' && eqItem) {
+        // Item stats block
+        let sy = 106;
+        ctx.font = '11px monospace'; ctx.textAlign = 'left';
+        if (eqItem.atk)   { ctx.fillStyle = '#ff9977'; ctx.fillText(`ATK  +${eqItem.atk}`,   RPANEL_X, sy); sy += 15; }
+        if (eqItem.def)   { ctx.fillStyle = '#77aaff'; ctx.fillText(`DEF  +${eqItem.def}`,   RPANEL_X, sy); sy += 15; }
+        if (eqItem.maxHp) { ctx.fillStyle = '#77dd77'; ctx.fillText(`HP   +${eqItem.maxHp}`, RPANEL_X, sy); sy += 15; }
+        if (eqItem.block) { ctx.fillStyle = '#aaccff'; ctx.fillText(`BLK  ${eqItem.block}/hit`, RPANEL_X, sy); sy += 15; }
+        // Enchantment
+        const ei = state.player.inventory.indexOf(eqId!);
+        if (ei >= 0 && state.player.enchantedSlots[ei]) {
+          const enc = ITEMS[state.player.enchantedSlots[ei]!];
+          if (enc?.enchantData) {
+            ctx.fillStyle = C.enchant; ctx.font = 'bold 9px monospace';
+            ctx.fillText('✦ ENCHANTED', RPANEL_X, sy + 4); sy += 16;
+            ctx.font = '11px monospace';
+            if (enc.enchantData.atk)   { ctx.fillStyle = '#dd99ff'; ctx.fillText(`ATK  +${enc.enchantData.atk}`,   RPANEL_X, sy); sy += 15; }
+            if (enc.enchantData.def)   { ctx.fillStyle = '#dd99ff'; ctx.fillText(`DEF  +${enc.enchantData.def}`,   RPANEL_X, sy); sy += 15; }
+            if (enc.enchantData.maxHp) { ctx.fillStyle = '#dd99ff'; ctx.fillText(`HP   +${enc.enchantData.maxHp}`, RPANEL_X, sy); sy += 15; }
+          }
+        }
+        // Description (wrapped)
+        sy += 4;
+        ctx.strokeStyle = '#1a1a2a'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(RPANEL_X, sy); ctx.lineTo(W - 14, sy); ctx.stroke();
+        sy += 12;
+        ctx.font = '10px monospace'; ctx.fillStyle = C.silver; ctx.textAlign = 'left';
+        const dws = eqItem.desc.split(' '); let dl = ''; let dy = sy;
+        for (const dw of dws) {
+          const t = dl ? dl + ' ' + dw : dw;
+          if (ctx.measureText(t).width > W - RPANEL_X - 18 && dl) { ctx.fillText(dl, RPANEL_X, dy); dy += 13; dl = dw; } else dl = t;
+        }
+        if (dl) ctx.fillText(dl, RPANEL_X, dy); dy += 18;
+
+        // Action menu
+        sy = Math.max(dy + 4, 280);
+        ctx.strokeStyle = '#1a2433'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(RPANEL_X, sy - 6); ctx.lineTo(W - 14, sy - 6); ctx.stroke();
+        const sellLabel = eqItem.price > 0 ? `Sell  (+${Math.floor(eqItem.price / 2)} ◈)` : 'Sell  (priceless)';
+        const acts = ['Unequip', sellLabel, 'Back'];
+        for (let ai = 0; ai < acts.length; ai++) {
+          const asel = menu.menuIndex === ai;
+          ctx.font = asel ? 'bold 13px monospace' : '13px monospace';
+          ctx.fillStyle = asel
+            ? (ai === 1 && eqItem.price === 0 ? '#555' : C.white)
+            : '#404050';
+          ctx.textAlign = 'left';
+          ctx.fillText((asel ? '► ' : '  ') + acts[ai], RPANEL_X, sy + ai * 26 + 16);
+        }
+        ctx.font = '10px monospace'; ctx.fillStyle = C.dim; ctx.textAlign = 'center';
+        ctx.fillText('[↑↓] select   [SPACE/Z] confirm   [X] cancel', (RPANEL_X + W) / 2, H - 38);
+
+      } else if (menu.mode === 'pick') {
+        // Item picker
+        const compatible = state.player.inventory.filter(iid => {
+          const it = ITEMS[iid];
+          return it && mslot.categories.includes(it.category as any);
+        });
+        const hasEq = !!eqId;
+        const totalOpts = compatible.length + (hasEq ? 1 : 0);
+        const maxVis = 12;
+        const scrollOff = Math.max(0, menu.menuIndex - maxVis + 1);
+
+        ctx.font = '11px monospace'; ctx.fillStyle = C.silver; ctx.textAlign = 'left';
+        ctx.fillText(hasEq ? 'Replace or unequip:' : 'Select item to equip:', RPANEL_X, 108);
+
+        let ly = 126;
+        if (hasEq) {
+          const usel = menu.menuIndex === 0;
+          ctx.font = usel ? 'bold 12px monospace' : '12px monospace';
+          ctx.fillStyle = usel ? '#cc7777' : '#553333';
+          ctx.fillText((usel ? '► ' : '  ') + `Unequip ${eqItem?.name ?? eqId}`, RPANEL_X, ly);
+          ly += 22;
+        }
+        for (let pi = scrollOff; pi < Math.min(scrollOff + maxVis, compatible.length); pi++) {
+          const optIdx = hasEq ? pi + 1 : pi;
+          const psel = menu.menuIndex === optIdx;
+          const cid = compatible[pi];
+          const cit = ITEMS[cid];
+          if (!cit) continue;
+          ctx.font = psel ? 'bold 11px monospace' : '11px monospace';
+          ctx.fillStyle = psel ? C.white : C.silver; ctx.textAlign = 'left';
+          ctx.fillText((psel ? '► ' : '  ') + cit.name, RPANEL_X, ly);
+          const sp: string[] = [];
+          if (cit.atk)   sp.push(`+${cit.atk}ATK`);
+          if (cit.def)   sp.push(`+${cit.def}DEF`);
+          if (cit.maxHp) sp.push(`+${cit.maxHp}HP`);
+          if (cit.block) sp.push(`${cit.block}BLK`);
+          if (sp.length) {
+            ctx.font = '10px monospace'; ctx.fillStyle = psel ? '#88aacc' : '#334455';
+            ctx.textAlign = 'right'; ctx.fillText(sp.join(' '), W - 16, ly);
+          }
+          ctx.textAlign = 'left'; ly += 22;
+        }
+        if (totalOpts > maxVis) {
+          ctx.font = '10px monospace'; ctx.fillStyle = C.dim; ctx.textAlign = 'center';
+          if (scrollOff > 0) ctx.fillText('▲', (RPANEL_X + W) / 2, 118);
+          if (scrollOff + maxVis < compatible.length) ctx.fillText('▼', (RPANEL_X + W) / 2, ly + 4);
+        }
+        ctx.font = '10px monospace'; ctx.fillStyle = C.dim; ctx.textAlign = 'center';
+        ctx.fillText('[↑↓] select   [SPACE/Z] equip   [X] cancel', (RPANEL_X + W) / 2, H - 38);
+      }
+    }
+  } else {
+    // Below silhouette: show selected slot info + total stats
+    const selSlot   = EQUIP_SLOTS[activeCursor];
+    const selItemId = selSlot ? eq[selSlot.id] : null;
+    const selItem   = selItemId ? ITEMS[selItemId] : null;
+    const INFOY = CY + 274;
+
+    ctx.strokeStyle = '#1a2433'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(RPANEL_X, INFOY); ctx.lineTo(W - 14, INFOY); ctx.stroke();
+
+    ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#5599cc';
+    ctx.fillText(selSlot?.label ?? '', RPANEL_X, INFOY + 14);
+    if (selItem) {
+      ctx.font = '11px monospace'; ctx.fillStyle = TIER_COLOR[selItem.tier] ?? C.silver;
+      ctx.fillText(selItem.name, RPANEL_X + 80, INFOY + 14);
+      let sy2 = INFOY + 28;
+      ctx.font = '11px monospace'; ctx.textAlign = 'left';
+      if (selItem.atk)   { ctx.fillStyle = '#ff9977'; ctx.fillText(`ATK +${selItem.atk}`,   RPANEL_X, sy2); sy2 += 14; }
+      if (selItem.def)   { ctx.fillStyle = '#77aaff'; ctx.fillText(`DEF +${selItem.def}`,   RPANEL_X, sy2); sy2 += 14; }
+      if (selItem.maxHp) { ctx.fillStyle = '#77dd77'; ctx.fillText(`HP  +${selItem.maxHp}`, RPANEL_X, sy2); sy2 += 14; }
+      if (selItem.block) { ctx.fillStyle = '#aaccff'; ctx.fillText(`BLK ${selItem.block}/hit`, RPANEL_X, sy2); }
+    } else if (selSlot) {
+      ctx.font = '10px monospace'; ctx.fillStyle = '#333344';
+      ctx.fillText('(empty)', RPANEL_X + 80, INFOY + 14);
+    }
+
+    // Total stat summary
+    const totalAtk = getWeaponAtkBonus(state);
+    const totalDef = getArmorDefBonus(state);
+    const atkStr = `ATK ${totalAtk > 0 ? '+' + totalAtk : 0}`;
+    const defStr = `DEF ${totalDef > 0 ? '+' + totalDef : 0}`;
+    const hpStr  = `HP ${state.player.hp}/${state.player.maxHp}`;
+    ctx.font = 'bold 10px monospace'; ctx.textAlign = 'right';
+    ctx.fillStyle = '#cc7755'; ctx.fillText(atkStr, W - 80, INFOY + 14);
+    ctx.fillStyle = '#5577cc'; ctx.fillText(defStr, W - 80, INFOY + 28);
+    ctx.fillStyle = '#55aa55'; ctx.fillText(hpStr,  W - 80, INFOY + 42);
+
+    ctx.font = '10px monospace'; ctx.fillStyle = C.dim; ctx.textAlign = 'center';
+    ctx.fillText('[↑↓] browse   [SPACE/Z] manage slot   [Q/Tab] all items   [X] close', W / 2, H - 38);
+    if (selSlot && !selItemId) {
+      ctx.fillStyle = '#334455';
+      ctx.fillText('[SPACE] to equip a ' + selSlot.label.toLowerCase() + ' from inventory', W / 2, H - 24);
+    }
+  }
+}
+
+// ── Page 1: All Items list ──────────────────────────────────────────
+function renderItemsList(ctx: CanvasRenderingContext2D, state: GameStateData) {
+  ctx.fillStyle = 'rgba(0,0,0,0.88)'; ctx.fillRect(0, 0, W, H);
+  pixelBox(ctx, 150, 54, W - 300, H - 108, C.black, C.white, 3);
+
+  // Tab bar
+  ctx.font = 'bold 13px monospace'; ctx.textAlign = 'left';
+  ctx.fillStyle = '#3a3a3a'; ctx.fillText('[ EQUIPMENT ]', 164, 44);
+  ctx.fillStyle = C.white;  ctx.fillText('[ ALL ITEMS ]', 312, 44);
+  ctx.fillStyle = C.dim; ctx.font = '10px monospace'; ctx.textAlign = 'right';
+  ctx.fillText('[Q / Tab] switch', W - 164, 44);
+  ctx.strokeStyle = '#282828'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(156, 50); ctx.lineTo(W - 156, 50); ctx.stroke();
+
+  ctx.fillStyle = C.white; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('ALL ITEMS', W / 2, 76);
+  ctx.strokeStyle = C.dim; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(166, 84); ctx.lineTo(W - 166, 84); ctx.stroke();
+
+  ctx.textAlign = 'left'; ctx.font = '14px monospace';
+
+  const eq = state.player.equipment as Record<string, string | null>;
+  const equippedIds = new Set(Object.values(eq).filter(Boolean) as string[]);
+
+  if (state.player.inventory.length === 0) {
+    ctx.fillStyle = C.dim; ctx.textAlign = 'center';
+    ctx.fillText('-- empty --', W / 2, 180);
+  } else {
+    const rowH = 26;
+    const listTop = 102;
+    const maxVisible = 10;
+    const total = state.player.inventory.length;
+    const maxScroll = Math.max(0, total - maxVisible);
+    const scrollOffset = Math.min(maxScroll, Math.max(0, state.inventoryIndex - maxVisible + 1));
+    const visibleSlots = state.player.inventory.slice(scrollOffset, scrollOffset + maxVisible);
+
+    visibleSlots.forEach((id, vi) => {
+      const i = scrollOffset + vi;
+      const sel = state.inventoryIndex === i;
+      const isEquipped = equippedIds.has(id);
+      const isOffhand  = state.player.equipment.offhand === id;
+      const displayName = itemDisplayName(state, i);
+      const tag = categoryTag(id);
+      const tagColor = categoryTagColor(id);
+
+      if (sel) {
+        ctx.fillStyle = '#111111'; ctx.fillRect(162, listTop + vi * rowH - 18, W - 324, 24);
+      }
+      ctx.font = '10px monospace'; ctx.fillStyle = tagColor; ctx.textAlign = 'left';
+      ctx.fillText(tag, 166, listTop + vi * rowH - 6);
+
+      ctx.font = sel ? 'bold 13px monospace' : '13px monospace';
+      const nameX = 166 + ctx.measureText(tag + ' ').width;
+      const itemTier = ITEMS[id]?.tier ?? 'common';
+      const suffix = isEquipped ? ' [E]' : isOffhand ? ' [OH]' : '';
+      if (itemTier === 'common' || itemTier === 'uncommon') {
+        ctx.fillStyle = sel ? C.white : C.gray;
+        ctx.fillText(displayName + suffix, nameX, listTop + vi * rowH - 6);
+      } else {
+        drawTierText(ctx, displayName + suffix, nameX, listTop + vi * rowH - 6, itemTier, state.frameCount);
+      }
+    });
+
+    if (scrollOffset > 0) {
+      ctx.fillStyle = C.dim; ctx.textAlign = 'center'; ctx.font = '12px monospace';
+      ctx.fillText('▲', W / 2, listTop - 14);
+    }
+    if (scrollOffset + maxVisible < total) {
+      ctx.fillStyle = C.dim; ctx.textAlign = 'center'; ctx.font = '12px monospace';
+      ctx.fillText('▼', W / 2, listTop + maxVisible * rowH - 4);
+    }
+
+    ctx.textAlign = 'left';
+    const curId = state.player.inventory[state.inventoryIndex];
+    const cur = ITEMS[curId];
+    if (cur) {
+      const divY = H - 148;
+      ctx.strokeStyle = '#222222'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(166, divY); ctx.lineTo(W - 166, divY); ctx.stroke();
+
+      const curEnch = state.player.enchantedSlots[state.inventoryIndex];
+      if (curEnch) {
+        const enchItem = ITEMS[curEnch];
+        ctx.fillStyle = C.enchant; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+        ctx.fillText(`✦ ENCHANTED — ${enchItem?.enchantData?.atk ? `+${enchItem.enchantData.atk} ATK` : ''}${enchItem?.enchantData?.def ? `+${enchItem.enchantData.def} DEF` : ''}${enchItem?.enchantData?.maxHp ? `+${enchItem.enchantData.maxHp} HP` : ''}`, W / 2, divY + 16);
+      }
+
+      const equipCats = new Set(['weapon','armor','shield','helmet','gloves','pants','boots','cloak','necklace','ring','belt','trinket']);
+      let actionLabel = '[X] close';
+      if (cur.category === 'weapon') {
+        const mainEq = state.player.equipment.weapon === curId;
+        const ohEq   = state.player.equipment.offhand === curId;
+        if (mainEq)      actionLabel = '[SPACE] unequip (main)  |  [X] close';
+        else if (ohEq)   actionLabel = '[SPACE] unequip (offhand)  |  [X] close';
+        else if (state.player.equipment.weapon) actionLabel = '[SPACE] equip offhand  |  [X] close';
+        else             actionLabel = '[SPACE] equip  |  [X] close';
+      } else if (cur.category === 'shield') {
+        actionLabel = '[SPACE] equip to offhand  |  [X] close';
+      } else if (equipCats.has(cur.category)) {
+        const isEq = equippedIds.has(curId);
+        actionLabel = isEq ? '[SPACE] unequip  |  [X] close' : '[SPACE] equip  |  [X] close';
+      } else if (cur.category === 'key') {
+        actionLabel = '[X] close';
+      } else if (cur.category === 'book') {
+        actionLabel = '[SPACE] read  |  [X] close';
+      } else if (cur.category === 'enchanted_book') {
+        actionLabel = '[SPACE] enchant item  |  [X] close';
+      } else {
+        actionLabel = '[SPACE] use  |  [X] close';
+      }
+      ctx.fillStyle = C.dim; ctx.font = '11px monospace'; ctx.textAlign = 'center';
+      ctx.fillText(actionLabel, W / 2, divY + (curEnch ? 36 : 22));
+    }
+  }
+
+  ctx.fillStyle = C.dim; ctx.textAlign = 'center'; ctx.font = '11px monospace';
+  ctx.fillText(`${state.player.inventory.length} items  |  [N] memory transit`, W / 2, H - 62);
+
+  // ── Item hover stat panel ──
+  const hoveredId   = state.player.inventory[state.inventoryIndex];
+  const hoveredItem = ITEMS[hoveredId];
+  if (hoveredItem && state.player.inventory.length > 0) {
+    const px = W - 144, py = 54, pw = 136, ph = H - 108;
+    pixelBox(ctx, px, py, pw, ph, '#0a0a0a', TIER_COLOR[hoveredItem.tier] ?? C.dim, 2);
+
+    ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = TIER_COLOR[hoveredItem.tier] ?? C.gray;
+    ctx.fillText((TIER_LABEL[hoveredItem.tier] ?? hoveredItem.tier).toUpperCase(), px + pw / 2, py + 16);
+
+    ctx.strokeStyle = TIER_COLOR[hoveredItem.tier] ?? C.dim; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(px + 6, py + 22); ctx.lineTo(px + pw - 6, py + 22); ctx.stroke();
+    const nameWords = hoveredItem.name.split(' ');
+    let nameLine = ''; let nameY = py + 36;
+    ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left';
+    for (const ww of nameWords) {
+      const test = nameLine ? nameLine + ' ' + ww : ww;
+      if (ctx.measureText(test).width > pw - 14 && nameLine) {
+        ctx.fillStyle = C.white; ctx.fillText(nameLine, px + 7, nameY); nameY += 14; nameLine = ww;
+      } else { nameLine = test; }
+    }
+    if (nameLine) { ctx.fillStyle = C.white; ctx.fillText(nameLine, px + 7, nameY); nameY += 18; }
+
+    const ench2 = state.player.enchantedSlots[state.inventoryIndex];
+    const enchItem2 = ench2 ? ITEMS[ench2] : null;
+    const hasStats = hoveredItem.atk || hoveredItem.def || hoveredItem.maxHp;
+    if (hasStats) {
+      ctx.strokeStyle = '#222222'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(px + 6, nameY - 4); ctx.lineTo(px + pw - 6, nameY - 4); ctx.stroke();
+      ctx.font = '11px monospace'; ctx.textAlign = 'left';
+      if (hoveredItem.atk)   { ctx.fillStyle = '#ff9977'; ctx.fillText(`ATK  +${hoveredItem.atk}`,   px + 7, nameY + 10); nameY += 16; }
+      if (hoveredItem.def)   { ctx.fillStyle = '#77aaff'; ctx.fillText(`DEF  +${hoveredItem.def}`,   px + 7, nameY + 10); nameY += 16; }
+      if (hoveredItem.maxHp) { ctx.fillStyle = '#77dd77'; ctx.fillText(`HP   +${hoveredItem.maxHp}`, px + 7, nameY + 10); nameY += 16; }
+      if (hoveredItem.block) { ctx.fillStyle = '#aaccff'; ctx.fillText(`BLK  ${hoveredItem.block}/hit`, px + 7, nameY + 10); nameY += 16; }
+      nameY += 6;
+    }
+    if (enchItem2?.enchantData) {
+      ctx.strokeStyle = '#331144'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(px + 6, nameY - 2); ctx.lineTo(px + pw - 6, nameY - 2); ctx.stroke();
+      ctx.font = 'bold 9px monospace'; ctx.fillStyle = C.enchant; ctx.textAlign = 'center';
+      ctx.fillText('✦ ENCHANTED', px + pw / 2, nameY + 10); nameY += 16;
+      ctx.font = '11px monospace'; ctx.textAlign = 'left';
+      if (enchItem2.enchantData.atk)   { ctx.fillStyle = '#dd99ff'; ctx.fillText(`ATK  +${enchItem2.enchantData.atk}`,   px + 7, nameY + 10); nameY += 16; }
+      if (enchItem2.enchantData.def)   { ctx.fillStyle = '#dd99ff'; ctx.fillText(`DEF  +${enchItem2.enchantData.def}`,   px + 7, nameY + 10); nameY += 16; }
+      if (enchItem2.enchantData.maxHp) { ctx.fillStyle = '#dd99ff'; ctx.fillText(`HP   +${enchItem2.enchantData.maxHp}`, px + 7, nameY + 10); nameY += 16; }
+      nameY += 6;
+    }
+    ctx.strokeStyle = '#222222'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(px + 6, nameY - 2); ctx.lineTo(px + pw - 6, nameY - 2); ctx.stroke();
+    ctx.font = '10px monospace'; ctx.fillStyle = C.silver; ctx.textAlign = 'left';
+    const descWords2 = hoveredItem.desc.split(' ');
+    let descLine2 = ''; let descY2 = nameY + 12;
+    for (const dw2 of descWords2) {
+      const t2 = descLine2 ? descLine2 + ' ' + dw2 : dw2;
+      if (ctx.measureText(t2).width > pw - 10 && descLine2) {
+        ctx.fillText(descLine2, px + 7, descY2); descY2 += 14; descLine2 = dw2;
+      } else { descLine2 = t2; }
+    }
+    if (descLine2) ctx.fillText(descLine2, px + 7, descY2);
+  }
+}

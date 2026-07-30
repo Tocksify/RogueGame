@@ -161,13 +161,9 @@ const TILES_Y = Math.floor(ROOM_HEIGHT / TILE_SIZE); // 10
 
 // Door gap: 2 tiles wide, centered
 // North/South: cols 7,8  (center = 7.5 → pixel 240)
-// East/West:   rows 4,5  (center = 4.5 → pixel 144... ROOM_HEIGHT/2=160, rows 4,5 = 128-192)
-// We want center at 160, so rows 4+5 = 128-192, center 160. ✓
-const DOOR_COLS_NS = [7, 8]; // which tile columns are the N/S door gap
-const DOOR_ROWS_EW = [4, 5]; // which tile rows are the E/W door gap
-
-// Interior floor variety (seeded by tile position so it's deterministic)
-const FLOOR_TILES = ['G', 'G', 'G', 'G', 'P', 'P', 'M'] as const;
+// East/West:   rows 4,5  (center = 4.5 → pixel 128-192, center 160)
+const DOOR_COLS_NS = [7, 8];
+const DOOR_ROWS_EW = [4, 5];
 
 function generateTileMap(doorways: Doorway[]): string[][] {
   const hasDoor = (side: string) => doorways.some((d) => d.side === side);
@@ -180,32 +176,56 @@ function generateTileMap(doorways: Doorway[]): string[][] {
       const isS = ty === TILES_Y - 1;
       const isW = tx === 0;
       const isE = tx === TILES_X - 1;
+      const isCorner = (isN || isS) && (isW || isE);
       const isPerimeter = isN || isS || isW || isE;
 
-      if (!isPerimeter) {
-        // Interior floor — deterministic variety
-        const seed = (tx * 7 + ty * 13) % FLOOR_TILES.length;
-        map[ty][tx] = FLOOR_TILES[seed];
+      // ── Structural corners: solid void blocks ──
+      if (isCorner) {
+        map[ty][tx] = 'V';
         continue;
       }
 
-      // Check if this perimeter tile is a door gap
-      if (isN && hasDoor('north') && DOOR_COLS_NS.includes(tx)) {
-        map[ty][tx] = 'D';
-      } else if (isS && hasDoor('south') && DOOR_COLS_NS.includes(tx)) {
-        map[ty][tx] = 'D';
-      } else if (isW && hasDoor('west') && DOOR_ROWS_EW.includes(ty)) {
-        map[ty][tx] = 'D';
-      } else if (isE && hasDoor('east') && DOOR_ROWS_EW.includes(ty)) {
-        map[ty][tx] = 'D';
-      } else {
-        map[ty][tx] = 'W';
+      // ── Perimeter: walls or door arches ──
+      if (isPerimeter) {
+        if (isN && hasDoor('north') && DOOR_COLS_NS.includes(tx)) {
+          map[ty][tx] = 'D';
+        } else if (isS && hasDoor('south') && DOOR_COLS_NS.includes(tx)) {
+          map[ty][tx] = 'D';
+        } else if (isW && hasDoor('west') && DOOR_ROWS_EW.includes(ty)) {
+          map[ty][tx] = 'D';
+        } else if (isE && hasDoor('east') && DOOR_ROWS_EW.includes(ty)) {
+          map[ty][tx] = 'D';
+        } else {
+          map[ty][tx] = 'W';
+        }
+        continue;
       }
+
+      // ── Inner ring (1 tile from walls): lantern sconces at interior corners,
+      //    plain stone along the wall strip ──
+      const isInnerRing =
+        ty === 1 || ty === TILES_Y - 2 || tx === 1 || tx === TILES_X - 2;
+      if (isInnerRing) {
+        const isInnerCorner =
+          (ty === 1 || ty === TILES_Y - 2) && (tx === 1 || tx === TILES_X - 2);
+        map[ty][tx] = isInnerCorner ? 'H' : 'G';
+        continue;
+      }
+
+      // ── Main interior: deterministic floor variety ──
+      // P = paving stones, G = gray stone, M = mosaic accent
+      const seed = (tx * 7 + ty * 13) % 16;
+      if (seed < 7)       map[ty][tx] = 'G'; // gray stone — most common
+      else if (seed < 12) map[ty][tx] = 'P'; // paving slabs
+      else                map[ty][tx] = 'M'; // mosaic accent
     }
   }
 
   return map;
 }
+
+// ── ZOOM ─────────────────────────────────────────────────────────────
+const ZOOM = 1.8;
 
 // ── MAIN RENDER ENTRY ─────────────────────────────────────────────────
 export function render(
@@ -220,26 +240,27 @@ export function render(
   ctx.fillStyle = C.black;
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-  // Camera: center room in viewport (or slide during transition)
-  let cameraOffsetX = canvasWidth / 2 - state.player.x;
-  let cameraOffsetY = canvasHeight / 2 - state.player.y;
+  // Camera: center on player (or slide during transition)
+  let camX = state.player.x;
+  let camY = state.player.y;
 
   if (state.transition && state.transition.active) {
     const progress =
       (Date.now() - state.transition.startTime) / state.transition.duration;
     const t = Math.min(1, progress);
-    const fromX = state.transition.fromRoom.x * ROOM_WIDTH;
-    const fromY = state.transition.fromRoom.y * ROOM_HEIGHT;
-    const toX   = state.transition.toRoom.x * ROOM_WIDTH;
-    const toY   = state.transition.toRoom.y * ROOM_HEIGHT;
-    const currentWorldX = fromX + (toX - fromX) * t;
-    const currentWorldY = fromY + (toY - fromY) * t;
-    cameraOffsetX = canvasWidth / 2 - currentWorldX - ROOM_WIDTH / 2;
-    cameraOffsetY = canvasHeight / 2 - currentWorldY - ROOM_HEIGHT / 2;
+    const fromX = state.transition.fromRoom.x * ROOM_WIDTH + ROOM_WIDTH / 2;
+    const fromY = state.transition.fromRoom.y * ROOM_HEIGHT + ROOM_HEIGHT / 2;
+    const toX   = state.transition.toRoom.x * ROOM_WIDTH + ROOM_WIDTH / 2;
+    const toY   = state.transition.toRoom.y * ROOM_HEIGHT + ROOM_HEIGHT / 2;
+    camX = fromX + (toX - fromX) * t;
+    camY = fromY + (toY - fromY) * t;
   }
 
   ctx.save();
-  ctx.translate(Math.round(cameraOffsetX), Math.round(cameraOffsetY));
+  // Zoom: scale around screen center, translate so camX/camY appears at screen center
+  ctx.translate(canvasWidth / 2, canvasHeight / 2);
+  ctx.scale(ZOOM, ZOOM);
+  ctx.translate(Math.round(-camX), Math.round(-camY));
 
   const room = state.rooms.get(roomKey(state.currentRoom));
   if (room) {
@@ -416,18 +437,37 @@ function drawFloorItem(ctx: CanvasRenderingContext2D, item: any): void {
   const itemDef = ITEMS[item.itemId];
   if (!itemDef) return;
 
-  // Subtle glowing dot
-  const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 400);
-  ctx.fillStyle = `rgba(192,192,192,${pulse * 0.8})`;
-  ctx.beginPath();
-  ctx.arc(item.x, item.y, 3, 0, Math.PI * 2);
-  ctx.fill();
+  const iconSize = 14;
+  const pad = 4;
+  const boxW = iconSize + pad * 2;
+  const boxH = iconSize + pad * 2;
+  const bx = Math.round(item.x - boxW / 2);
+  const by = Math.round(item.y - boxH - 6);
 
-  // Icon above dot
-  const iconSize = 12;
-  const ix = item.x - iconSize / 2;
-  const iy = item.y - iconSize - 5;
-  drawItemIcon(ctx, item.x, ix, iy, iconSize, itemDef);
+  // Pulsing border glow
+  const pulse = 0.55 + 0.45 * Math.sin(Date.now() / 380);
+  ctx.fillStyle = `rgba(8,8,8,${0.72})`;
+  ctx.fillRect(bx, by, boxW, boxH);
+  ctx.strokeStyle = `rgba(192,192,192,${pulse})`;
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(bx, by, boxW, boxH);
+  // Corner dots (pixel box style)
+  ctx.fillStyle = `rgba(192,192,192,${pulse})`;
+  ctx.fillRect(bx, by, 2, 2);
+  ctx.fillRect(bx + boxW - 2, by, 2, 2);
+  ctx.fillRect(bx, by + boxH - 2, 2, 2);
+  ctx.fillRect(bx + boxW - 2, by + boxH - 2, 2, 2);
+
+  // Icon inside the box
+  const ix = bx + pad;
+  const iy = by + pad;
+  drawItemIcon(ctx, bx + boxW / 2, ix, iy, iconSize, itemDef);
+
+  // Subtle glow dot below the box
+  ctx.fillStyle = `rgba(192,192,192,${pulse * 0.5})`;
+  ctx.beginPath();
+  ctx.arc(item.x, item.y - 2, 2, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 // ── ITEM ICON (shared by floor + hotbar) ──────────────────────────────
