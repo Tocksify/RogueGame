@@ -299,6 +299,20 @@ function HotbarSlot({ index, itemId, isSelected, onAssign }: {
   );
 }
 
+// Build the action list for a given item + equipped state
+function getActions(
+  itemId: string,
+  equippedSlot: keyof EquippedItems | null,
+  canEquip: boolean
+): string[] {
+  const actions: string[] = [];
+  if (canEquip) {
+    actions.push(equippedSlot ? 'Unequip' : 'Equip');
+  }
+  actions.push('Drop');
+  return actions;
+}
+
 function InventoryOverlay({
   player,
   onClose,
@@ -307,44 +321,73 @@ function InventoryOverlay({
   onDrop,
   onAddToHotbar,
 }: InventoryOverlayProps) {
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  // Browse mode: which item is highlighted
+  const [itemCursor, setItemCursor] = useState(0);
+  // Action mode: null = browse, number = action cursor index
+  const [actionCursor, setActionCursor] = useState<number | null>(null);
 
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'e' || e.key === 'E' || e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  const items = player.inventory;
+  const clampedCursor = Math.min(itemCursor, Math.max(0, items.length - 1));
 
-  const selectedInvItem = selectedItemId
-    ? player.inventory.find((i) => i.itemId === selectedItemId) ?? null
-    : null;
-  const selectedItemDef = selectedInvItem ? ITEMS[selectedInvItem.itemId] : null;
+  const selectedInvItem = items[clampedCursor] ?? null;
+  const selectedItemId = selectedInvItem?.itemId ?? null;
+  const selectedItemDef = selectedItemId ? ITEMS[selectedItemId] : null;
 
   const equippedSlot: keyof EquippedItems | null = selectedItemId
     ? (Object.entries(player.equipped).find(([, v]) => v === selectedItemId)?.[0] as keyof EquippedItems) ?? null
     : null;
-
   const canEquip = selectedItemDef ? EQUIPPABLE_TYPES.has(selectedItemDef.type) : false;
+  const actions = selectedItemId ? getActions(selectedItemId, equippedSlot, canEquip) : [];
 
-  const handleEquip = () => {
-    if (!selectedItemId || !canEquip) return;
-    onEquip(selectedItemId);
-    setSelectedItemId(null);
-  };
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
 
-  const handleUnequip = () => {
-    if (!equippedSlot) return;
-    onUnequip(equippedSlot);
-    setSelectedItemId(null);
-  };
+      // Always consume navigation keys so they don't scroll the page or move the player
+      if (['w', 's', ' ', 'arrowup', 'arrowdown'].includes(key)) {
+        e.preventDefault();
+      }
 
-  const handleDrop = () => {
-    if (!selectedItemId) return;
-    onDrop(selectedItemId);
-    setSelectedItemId(null);
-  };
+      if (key === 'escape') {
+        if (actionCursor !== null) {
+          setActionCursor(null); // back to browse
+        } else {
+          onClose();
+        }
+        return;
+      }
+      if ((key === 'e') && actionCursor === null) {
+        onClose();
+        return;
+      }
+
+      const up   = key === 'w' || key === 'arrowup';
+      const down = key === 's' || key === 'arrowdown';
+
+      if (actionCursor !== null) {
+        // ── Action mode ──
+        if (up)   setActionCursor(c => Math.max(0, (c ?? 0) - 1));
+        if (down) setActionCursor(c => Math.min(actions.length - 1, (c ?? 0) + 1));
+        if (key === ' ') {
+          const action = actions[actionCursor];
+          if (action === 'Equip' && selectedItemId)   { onEquip(selectedItemId);   setActionCursor(null); }
+          if (action === 'Unequip' && equippedSlot)   { onUnequip(equippedSlot);   setActionCursor(null); }
+          if (action === 'Drop' && selectedItemId)     { onDrop(selectedItemId);    setActionCursor(null); }
+        }
+      } else {
+        // ── Browse mode ──
+        if (up)   setItemCursor(c => Math.max(0, c - 1));
+        if (down) setItemCursor(c => Math.min(Math.max(0, items.length - 1), c + 1));
+        if (key === ' ' && items.length > 0) {
+          setActionCursor(0); // enter action mode
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actionCursor, clampedCursor, items.length, actions.length, selectedItemId, equippedSlot, onClose, onEquip, onUnequip, onDrop]);
 
   const handleHotbarAssign = (slot: number) => {
     if (!selectedItemId) return;
@@ -399,12 +442,12 @@ function InventoryOverlay({
               ALL ITEMS ({player.inventory.length})
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
-              {player.inventory.length === 0 ? (
+              {items.length === 0 ? (
                 <div style={{ color: INV_C.dim, fontSize: 11, padding: '12px 0', textAlign: 'center' }}>— empty —</div>
-              ) : player.inventory.map((invItem) => {
+              ) : items.map((invItem, idx) => {
                 const itemDef = ITEMS[invItem.itemId];
                 if (!itemDef) return null;
-                const isSelected = selectedItemId === invItem.itemId;
+                const isCursor = idx === clampedCursor;
                 const isEquipped = Object.values(player.equipped).includes(invItem.itemId);
                 const tag = TYPE_TAG[itemDef.type] ?? '???';
                 const tagColor = TYPE_COLOR[itemDef.type] ?? INV_C.silver;
@@ -412,19 +455,19 @@ function InventoryOverlay({
                 return (
                   <div
                     key={invItem.itemId}
-                    onClick={() => setSelectedItemId(isSelected ? null : invItem.itemId)}
+                    onClick={() => { setItemCursor(idx); setActionCursor(null); }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8,
                       padding: '5px 6px', marginBottom: 2, cursor: 'pointer',
-                      background: isSelected ? INV_C.selBg : 'transparent',
-                      border: `1px solid ${isSelected ? INV_C.selBorder : 'transparent'}`,
+                      background: isCursor ? INV_C.selBg : 'transparent',
+                      border: `1px solid ${isCursor ? INV_C.selBorder : 'transparent'}`,
                     }}
                   >
-                    <span style={{ color: isSelected ? INV_C.selBorder : INV_C.dim, fontSize: 11, width: 10 }}>
-                      {isSelected ? '►' : ' '}
+                    <span style={{ color: isCursor ? INV_C.selBorder : INV_C.dim, fontSize: 11, width: 10 }}>
+                      {isCursor ? '►' : ' '}
                     </span>
                     <span style={{ color: tagColor, fontSize: 9, width: 28, flexShrink: 0 }}>[{tag}]</span>
-                    <span style={{ color: isSelected ? INV_C.white : INV_C.silver, fontSize: 12, flex: 1 }}>
+                    <span style={{ color: isCursor ? INV_C.white : INV_C.silver, fontSize: 12, flex: 1 }}>
                       {itemDef.name}
                       {isEquipped && <span style={{ color: INV_C.selBorder, fontSize: 9, marginLeft: 6 }}>[E]</span>}
                     </span>
@@ -438,7 +481,6 @@ function InventoryOverlay({
           {/* ── Right panel: item detail + actions ── */}
           <div style={{ width: 228, display: 'flex', flexDirection: 'column', padding: '10px 14px', gap: 0 }}>
 
-            {/* Selected item info */}
             {selectedItemDef ? (
               <>
                 <div style={{ color: TYPE_COLOR[selectedItemDef.type] ?? INV_C.silver, fontSize: 9, letterSpacing: 2, marginBottom: 4 }}>
@@ -452,62 +494,62 @@ function InventoryOverlay({
                 )}
 
                 {/* Stats */}
-                {(selectedItemDef.damageBonus || selectedItemDef.maxHpBonus) && (
+                {(selectedItemDef.damageBonus || selectedItemDef.maxHpBonus || selectedItemDef.healAmount) && (
                   <div style={{ margin: '6px 0', padding: '6px 0', borderTop: `1px solid ${INV_C.borderDim}`, borderBottom: `1px solid ${INV_C.borderDim}` }}>
-                    {selectedItemDef.damageBonus && (
-                      <div style={{ color: INV_C.atkColor, fontSize: 11, marginBottom: 2 }}>ATK  +{selectedItemDef.damageBonus}</div>
-                    )}
-                    {selectedItemDef.maxHpBonus && (
-                      <div style={{ color: INV_C.hpColor, fontSize: 11 }}>HP   +{selectedItemDef.maxHpBonus}</div>
-                    )}
-                    {selectedItemDef.healAmount && (
-                      <div style={{ color: INV_C.hpColor, fontSize: 11 }}>Heals {selectedItemDef.healAmount} HP</div>
-                    )}
+                    {selectedItemDef.damageBonus && <div style={{ color: INV_C.atkColor, fontSize: 11, marginBottom: 2 }}>ATK  +{selectedItemDef.damageBonus}</div>}
+                    {selectedItemDef.maxHpBonus  && <div style={{ color: INV_C.hpColor,  fontSize: 11, marginBottom: 2 }}>HP   +{selectedItemDef.maxHpBonus}</div>}
+                    {selectedItemDef.healAmount  && <div style={{ color: INV_C.hpColor,  fontSize: 11 }}>Heals {selectedItemDef.healAmount} HP</div>}
                   </div>
                 )}
 
-                {/* Equip status */}
                 {equippedSlot && (
                   <div style={{ color: INV_C.selBorder, fontSize: 9, margin: '4px 0', letterSpacing: 1 }}>
                     ✦ EQUIPPED ({equippedSlot})
                   </div>
                 )}
 
-                {/* Divider */}
                 <div style={{ borderTop: `1px solid ${INV_C.borderDim}`, margin: '8px 0' }} />
 
-                {/* Action buttons */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {canEquip && !equippedSlot && (
-                    <button onClick={handleEquip} style={{
-                      padding: '6px 0', background: '#112233', border: `1px solid ${INV_C.selBorder}`,
-                      color: INV_C.white, fontSize: 12, fontFamily: 'inherit', cursor: 'pointer',
-                      letterSpacing: 1,
-                    }}>
-                      ► Equip
-                    </button>
-                  )}
-                  {equippedSlot && (
-                    <button onClick={handleUnequip} style={{
-                      padding: '6px 0', background: '#111122', border: `1px solid #404060`,
-                      color: INV_C.silver, fontSize: 12, fontFamily: 'inherit', cursor: 'pointer',
-                      letterSpacing: 1,
-                    }}>
-                      Unequip
-                    </button>
-                  )}
+                {/* Action list — keyboard cursor + clickable */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {!canEquip && (
-                    <div style={{ color: INV_C.dim, fontSize: 10, fontStyle: 'italic' }}>
-                      Cannot equip — runs passively
+                    <div style={{ color: INV_C.dim, fontSize: 10, fontStyle: 'italic', marginBottom: 4 }}>
+                      Runs passively — cannot equip
                     </div>
                   )}
-                  <button onClick={handleDrop} style={{
-                    padding: '6px 0', background: '#1a0808', border: `1px solid #663333`,
-                    color: '#cc6666', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer',
-                    letterSpacing: 1,
-                  }}>
-                    Drop
-                  </button>
+                  {actions.map((action, ai) => {
+                    const isActionCursor = actionCursor === ai;
+                    const isDestructive = action === 'Drop';
+                    return (
+                      <div
+                        key={action}
+                        onClick={() => {
+                          if (action === 'Equip'   && selectedItemId) { onEquip(selectedItemId);   setActionCursor(null); }
+                          if (action === 'Unequip' && equippedSlot)   { onUnequip(equippedSlot);   setActionCursor(null); }
+                          if (action === 'Drop'    && selectedItemId) { onDrop(selectedItemId);     setActionCursor(null); }
+                        }}
+                        style={{
+                          padding: '6px 8px', cursor: 'pointer',
+                          background: isActionCursor
+                            ? (isDestructive ? '#2a0808' : '#0c1c2c')
+                            : 'transparent',
+                          border: `1px solid ${isActionCursor
+                            ? (isDestructive ? '#883333' : INV_C.selBorder)
+                            : INV_C.borderDim}`,
+                          color: isDestructive
+                            ? (isActionCursor ? '#ee6666' : '#663333')
+                            : (isActionCursor ? INV_C.white : INV_C.dim),
+                          fontSize: 12, fontFamily: 'inherit',
+                          display: 'flex', alignItems: 'center', gap: 6,
+                        }}
+                      >
+                        <span style={{ width: 10, color: INV_C.selBorder }}>
+                          {isActionCursor ? '►' : ' '}
+                        </span>
+                        {action}
+                      </div>
+                    );
+                  })}
                 </div>
               </>
             ) : (
@@ -536,9 +578,13 @@ function InventoryOverlay({
         {/* ── Footer ── */}
         <div style={{
           padding: '6px 16px', borderTop: `1px solid ${INV_C.borderDim}`,
-          display: 'flex', justifyContent: 'center', gap: 32,
+          display: 'flex', justifyContent: 'center',
         }}>
-          <span style={{ color: INV_C.dim, fontSize: 10 }}>[↑↓] browse   [click] select   [E/Esc] close</span>
+          <span style={{ color: INV_C.dim, fontSize: 10 }}>
+            {actionCursor !== null
+              ? '[W/S] choose action   [Space] confirm   [Esc] back'
+              : '[W/S] browse items   [Space] select   [E/Esc] close'}
+          </span>
         </div>
       </PixelBox>
     </div>

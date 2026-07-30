@@ -437,36 +437,64 @@ function drawFloorItem(ctx: CanvasRenderingContext2D, item: any): void {
   const itemDef = ITEMS[item.itemId];
   if (!itemDef) return;
 
+  const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 380);
   const iconSize = 14;
-  const pad = 4;
-  const boxW = iconSize + pad * 2;
-  const boxH = iconSize + pad * 2;
-  const bx = Math.round(item.x - boxW / 2);
-  const by = Math.round(item.y - boxH - 6);
+  const cx = item.x;
+  const ix = Math.round(cx - iconSize / 2);
+  const iy = Math.round(item.y - iconSize - 6);
 
-  // Pulsing border glow
-  const pulse = 0.55 + 0.45 * Math.sin(Date.now() / 380);
-  ctx.fillStyle = `rgba(8,8,8,${0.72})`;
-  ctx.fillRect(bx, by, boxW, boxH);
-  ctx.strokeStyle = `rgba(192,192,192,${pulse})`;
+  // Draw icon normally
+  drawItemIcon(ctx, cx, ix, iy, iconSize, itemDef);
+
+  // Draw pulsing outline directly on the same shape
+  ctx.save();
+  ctx.strokeStyle = `rgba(220,220,220,${0.4 + 0.6 * pulse})`;
   ctx.lineWidth = 1.5;
-  ctx.strokeRect(bx, by, boxW, boxH);
-  // Corner dots (pixel box style)
-  ctx.fillStyle = `rgba(192,192,192,${pulse})`;
-  ctx.fillRect(bx, by, 2, 2);
-  ctx.fillRect(bx + boxW - 2, by, 2, 2);
-  ctx.fillRect(bx, by + boxH - 2, 2, 2);
-  ctx.fillRect(bx + boxW - 2, by + boxH - 2, 2, 2);
+  const pad = 2; // slight outset so border doesn't overlap fill
 
-  // Icon inside the box
-  const ix = bx + pad;
-  const iy = by + pad;
-  drawItemIcon(ctx, bx + boxW / 2, ix, iy, iconSize, itemDef);
+  switch (itemDef.icon.shape) {
+    case 'rect':
+      ctx.strokeRect(ix - pad, iy - pad, iconSize + pad * 2, iconSize + pad * 2);
+      break;
+    case 'circle':
+      ctx.beginPath();
+      ctx.arc(cx, iy + iconSize / 2, iconSize / 2 + pad, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    case 'trapezoid':
+      ctx.beginPath();
+      ctx.moveTo(ix + 2 - pad, iy - pad);
+      ctx.lineTo(ix + iconSize - 2 + pad, iy - pad);
+      ctx.lineTo(ix + iconSize + pad, iy + iconSize + pad);
+      ctx.lineTo(ix - pad, iy + iconSize + pad);
+      ctx.closePath();
+      ctx.stroke();
+      break;
+    case 'hexagon': {
+      const r = iconSize / 2 + pad;
+      const hcx = cx, hcy = iy + iconSize / 2;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i;
+        const hpx = hcx + r * Math.cos(a);
+        const hpy = hcy + r * Math.sin(a);
+        i === 0 ? ctx.moveTo(hpx, hpy) : ctx.lineTo(hpx, hpy);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      break;
+    }
+    case 'key':
+      // Outline the key shape with a simple bounding box
+      ctx.strokeRect(ix - pad, iy - pad, iconSize + pad * 2, iconSize + pad * 2);
+      break;
+  }
+  ctx.restore();
 
-  // Subtle glow dot below the box
-  ctx.fillStyle = `rgba(192,192,192,${pulse * 0.5})`;
+  // Ground dot
+  ctx.fillStyle = `rgba(192,192,192,${pulse * 0.45})`;
   ctx.beginPath();
-  ctx.arc(item.x, item.y - 2, 2, 0, Math.PI * 2);
+  ctx.arc(cx, item.y, 2, 0, Math.PI * 2);
   ctx.fill();
 }
 
