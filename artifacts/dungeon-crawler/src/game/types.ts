@@ -87,6 +87,16 @@ export interface Enemy {
   dead: boolean;
   deathTime: number;
   dropItemId: string;
+  // Enemy type variants
+  enemyType?: 'standard' | 'chaser' | 'boss';
+  isBoss?: boolean;
+  bossName?: string;
+  // Explosion (chaser)
+  explodeDelay?: number;   // ms after death before exploding
+  explodeRadius?: number;
+  explodeDamage?: number;
+  explodeTime?: number;    // Date.now() + explodeDelay, set on death
+  exploded?: boolean;
 }
 
 export interface NPC {

@@ -320,10 +320,37 @@ export function update(
     state.attackArc = null;
   }
 
+  // Chaser explosion countdown
+  for (const enemy of room.enemies) {
+    if (enemy.dead && enemy.enemyType === 'chaser' && !enemy.exploded) {
+      if (Date.now() >= (enemy.explodeTime ?? Infinity)) {
+        enemy.exploded = true;
+        const dist = distance(state.player, enemy);
+        if (dist <= (enemy.explodeRadius ?? 90)) {
+          damagePlayer(state, enemy.explodeDamage ?? 40);
+          addFloatingText(state, 'BOOM!', enemy.x, enemy.y - 30);
+        }
+        state.screenFlash = {
+          color: '#ff3300',
+          alpha: 0.55,
+          startTime: Date.now(),
+          duration: 350,
+        };
+      }
+    }
+  }
+
   // Remove dead enemies after fade
   for (let i = room.enemies.length - 1; i >= 0; i--) {
     const enemy = room.enemies[i];
-    if (enemy.dead && Date.now() - enemy.deathTime > 2000) {
+    if (!enemy.dead) continue;
+
+    if (enemy.enemyType === 'chaser') {
+      // Remove 600 ms after explosion fires
+      if (enemy.exploded && Date.now() - (enemy.explodeTime ?? enemy.deathTime) > 600) {
+        room.enemies.splice(i, 1);
+      }
+    } else if (Date.now() - enemy.deathTime > 2000) {
       room.enemies.splice(i, 1);
     }
   }
@@ -375,6 +402,12 @@ function performPlayerAttack(
       if (enemy.hp <= 0) {
         enemy.dead = true;
         enemy.deathTime = Date.now();
+        // Chasers get an explosion countdown
+        if (enemy.enemyType === 'chaser' && enemy.explodeDelay !== undefined) {
+          enemy.explodeTime = enemy.deathTime + enemy.explodeDelay;
+          enemy.exploded = false;
+          addFloatingText(state, '!', enemy.x, enemy.y - 30);
+        }
         const room2 = getCurrentRoom(state);
         if (room2) {
           room2.items.push({

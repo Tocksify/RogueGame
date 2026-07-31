@@ -285,6 +285,59 @@ function createEnemy(
     dead: false,
     deathTime: 0,
     dropItemId,
+    enemyType: 'standard',
+  };
+}
+
+/** A fast red enemy that explodes 1.5 s after death. Run! */
+function createChaserEnemy(x: number, y: number): Enemy {
+  return {
+    id: `enemy-${enemyIdCounter++}`,
+    x,
+    y,
+    hp: 45,
+    maxHp: 45,
+    speed: 145,
+    aggro: true, // always chasing from spawn
+    lastAttackTime: 0,
+    attackCooldown: 1200,
+    waypoint: null,
+    waypointPauseUntil: 0,
+    appearance: getNpcAppearance('skeleton-1', '#cc3311'),
+    damageFlashTime: 0,
+    dead: false,
+    deathTime: 0,
+    dropItemId: 'health-potion',
+    enemyType: 'chaser',
+    explodeDelay: 1500,
+    explodeRadius: 90,
+    explodeDamage: 40,
+    exploded: false,
+  };
+}
+
+/** The Greed boss. */
+function createGreedBoss(): Enemy {
+  return {
+    id: `enemy-${enemyIdCounter++}`,
+    x: 240,
+    y: 160,
+    hp: 500,
+    maxHp: 500,
+    speed: 52,
+    aggro: false,
+    lastAttackTime: 0,
+    attackCooldown: 900,
+    waypoint: null,
+    waypointPauseUntil: 0,
+    appearance: getNpcAppearance('merchant', '#c8a800'),
+    damageFlashTime: 0,
+    dead: false,
+    deathTime: 0,
+    dropItemId: 'godhead',
+    enemyType: 'boss',
+    isBoss: true,
+    bossName: 'Greed',
   };
 }
 
@@ -333,27 +386,30 @@ export function createWorld(): Map<string, Room> {
     ],
   });
 
-  // ── Room (1,0) — east of start ────────────────────────────────────────
+  // ── Room (1,0) — east of start: CHASER ROOM ──────────────────────────
   rooms.set('1,0', {
     coord: { x: 1, y: 0 },
-    enemies: [createEnemy(300, 160, 'skeleton-1', '#e0c840', 'iron-sword')],
+    enemies: [
+      createChaserEnemy(300, 100),
+      createChaserEnemy(150, 220),
+      createChaserEnemy(360, 210),
+    ],
     npcs: [],
-    items: [],
+    items: [createFloorItem('health-potion', 100, 80)],
     doorways: [
       { side: 'west', toRoom: { x: 0, y: 0 } },
       { side: 'south', toRoom: { x: 1, y: 1 } },
     ],
   });
 
-  // ── Room (0,1) — south of start ───────────────────────────────────────
+  // ── Room (0,1) — south of start: BOSS ARENA ──────────────────────────
   rooms.set('0,1', {
     coord: { x: 0, y: 1 },
-    enemies: [],
+    enemies: [createGreedBoss()],
     npcs: [],
-    items: [createFloorItem('health-potion', 240, 160)],
+    items: [],
     doorways: [
       { side: 'north', toRoom: { x: 0, y: 0 } },
-      { side: 'east', toRoom: { x: 1, y: 1 } },
     ],
   });
 

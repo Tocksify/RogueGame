@@ -310,34 +310,80 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState): void {
 
   for (const enemy of room.enemies) {
     if (enemy.dead) {
-      const fadeProg = Math.min(1, (Date.now() - enemy.deathTime) / 2000);
-      ctx.globalAlpha = 1 - fadeProg;
-      drawSprite(ctx, enemy.x - 16, enemy.y - 32, enemy.appearance);
-      ctx.globalAlpha = 1;
+      const isChaserCountdown =
+        enemy.enemyType === 'chaser' && !enemy.exploded && enemy.explodeTime !== undefined;
+
+      if (isChaserCountdown) {
+        // Draw expanding red warning ring so player knows to run
+        const timeLeft = Math.max(0, enemy.explodeTime! - Date.now());
+        const progress = 1 - timeLeft / (enemy.explodeDelay ?? 1500);
+        const pulse = 0.5 + 0.5 * Math.sin(Date.now() / Math.max(20, 120 - progress * 90));
+        const ringR = (enemy.explodeRadius ?? 90) * (0.25 + 0.75 * progress);
+
+        ctx.save();
+        // Filled danger zone
+        ctx.globalAlpha = 0.06 + progress * 0.14 + pulse * 0.06;
+        ctx.fillStyle = '#ff2200';
+        ctx.beginPath();
+        ctx.arc(enemy.x, enemy.y - 16, ringR, 0, Math.PI * 2);
+        ctx.fill();
+        // Ring stroke
+        ctx.globalAlpha = 0.4 + pulse * 0.4;
+        ctx.strokeStyle = '#ff4400';
+        ctx.lineWidth = 2 + progress * 2;
+        ctx.beginPath();
+        ctx.arc(enemy.x, enemy.y - 16, ringR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // Body stays visible
+        ctx.globalAlpha = 0.8;
+        drawSprite(ctx, enemy.x - 16, enemy.y - 32, enemy.appearance);
+        ctx.globalAlpha = 1;
+      } else if (enemy.enemyType === 'chaser' && enemy.exploded) {
+        // Fast fade after explosion
+        const elapsed = Date.now() - (enemy.explodeTime ?? enemy.deathTime);
+        const fadeProg = Math.min(1, elapsed / 600);
+        ctx.globalAlpha = 1 - fadeProg;
+        drawSprite(ctx, enemy.x - 16, enemy.y - 32, enemy.appearance);
+        ctx.globalAlpha = 1;
+      } else {
+        // Normal fade for standard / boss enemies
+        const fadeProg = Math.min(1, (Date.now() - enemy.deathTime) / 2000);
+        ctx.globalAlpha = 1 - fadeProg;
+        drawSprite(ctx, enemy.x - 16, enemy.y - 32, enemy.appearance);
+        ctx.globalAlpha = 1;
+      }
       continue;
     }
 
     if (enemy.damageFlashTime > 0) {
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      const flashColor = enemy.enemyType === 'chaser'
+        ? 'rgba(255, 120, 60, 0.45)'
+        : 'rgba(255, 255, 255, 0.35)';
+      ctx.fillStyle = flashColor;
       ctx.fillRect(enemy.x - 20, enemy.y - 40, 40, 50);
       ctx.restore();
     }
 
     drawSprite(ctx, enemy.x - 16, enemy.y - 32, enemy.appearance);
 
-    const bw = 30; const bh = 4;
-    const bx = Math.round(enemy.x - bw / 2);
-    const by = Math.round(enemy.y - 46);
-    ctx.fillStyle = C.darkest;
-    ctx.fillRect(bx, by, bw, bh);
-    const hpPct = enemy.hp / enemy.maxHp;
-    ctx.fillStyle = '#4a7c59';
-    ctx.fillRect(bx, by, Math.round(bw * hpPct), bh);
-    ctx.strokeStyle = C.mid;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(bx, by, bw, bh);
+    // Small in-world HP bar (skip for bosses — they get the big top bar)
+    if (!enemy.isBoss) {
+      const bw = 30; const bh = 4;
+      const bx = Math.round(enemy.x - bw / 2);
+      const by = Math.round(enemy.y - 46);
+      ctx.fillStyle = C.darkest;
+      ctx.fillRect(bx, by, bw, bh);
+      const hpPct = enemy.hp / enemy.maxHp;
+      ctx.fillStyle = enemy.enemyType === 'chaser' ? '#cc3311' : '#4a7c59';
+      ctx.fillRect(bx, by, Math.round(bw * hpPct), bh);
+      ctx.strokeStyle = C.mid;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx, by, bw, bh);
+    }
   }
 
   if (state.player.damageFlashTime > 0) {
@@ -594,8 +640,44 @@ function drawHUD(
   ctx.font = '10px "Space Mono", monospace';
   ctx.fillText(`◈ ${(state.player.gold ?? 0).toLocaleString()}`, 20, 54);
 
-  // ── Top-right: Room info box ──
+  // ── Boss HP bar (top-centre, only when boss is alive in current room) ──
   const room = state.rooms.get(roomKey(state.currentRoom));
+  const boss = room?.enemies.find((e) => e.isBoss && !e.dead);
+  if (boss) {
+    const barW = Math.min(500, cw - 120);
+    const barH = 18;
+    const barX = Math.round(cw / 2 - barW / 2);
+    const barY = 14;
+
+    // Boss name above bar
+    ctx.font = 'bold 13px "Space Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e0c840';
+    ctx.fillText(boss.bossName ?? 'BOSS', cw / 2, barY - 5);
+
+    // Gold outer frame
+    pixelBox(ctx, barX - 3, barY, barW + 6, barH + 4, C.black, '#e0c840', 2);
+
+    // Dark background
+    ctx.fillStyle = '#1a0000';
+    ctx.fillRect(barX, barY + 2, barW, barH);
+
+    // HP fill — two-tone for depth
+    const hpPct = Math.max(0, boss.hp / boss.maxHp);
+    const fillW = Math.round(barW * hpPct);
+    ctx.fillStyle = '#8b0000';
+    ctx.fillRect(barX, barY + 2, fillW, barH);
+    ctx.fillStyle = '#cc1122';
+    ctx.fillRect(barX, barY + 2, fillW, Math.round(barH * 0.55));
+
+    // HP text
+    ctx.font = '10px "Space Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(`${boss.hp} / ${boss.maxHp}`, cw / 2, barY + barH - 3);
+  }
+
+  // ── Top-right: Room info box ──
   const enemyCount = room ? room.enemies.filter((e) => !e.dead).length : 0;
   const infoW = 160; const infoH = 46;
   pixelBox(ctx, cw - infoW - 12, 10, infoW, infoH, C.black, C.mid, 2);
