@@ -14,7 +14,7 @@
 const FRAME_W = 96;
 const FRAME_H = 96;
 const FRAMES = 8;
-const DRAW_SIZE = 48; // pixels in world space (half of 96)
+const DRAW_SIZE = 84; // pixels in world space (~1.75× the original 48)
 const IDLE_FPS = 8;   // frames per second for idle animation
 const RUN_FPS  = 12;  // frames per second for run animation
 
