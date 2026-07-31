@@ -6,9 +6,10 @@ import {
   FloatingText,
   FloorItem,
   Doorway,
+  Room,
 } from './types';
 import { InputState } from './input';
-import { roomKey, ROOM_WIDTH, ROOM_HEIGHT, ITEMS } from './world';
+import { roomKey, ROOM_WIDTH, ROOM_HEIGHT, TILE_SIZE, ITEMS } from './world';
 import {
   addItem,
   useConsumable,
@@ -23,7 +24,10 @@ const NPC_HITBOX_RADIUS = 14;
 const ITEM_PICKUP_RADIUS = 16;
 const ATTACK_RANGE = 60;
 const ATTACK_ARC_ANGLE = Math.PI / 2;
-const DOORWAY_WIDTH = 64;
+// Door trigger threshold: player must be within this many pixels of the wall edge.
+// Must be >= wallPadding (PLAYER_HITBOX_RADIUS + 16 = 28) so the door is reachable.
+const DOOR_THRESHOLD = 36;
+const DOORWAY_HALF_WIDTH = 40; // half-width of the door opening in pixels
 const PROVIDENCE_RADIUS = 220;
 
 function distance(a: Vector2, b: Vector2): number {
@@ -34,10 +38,6 @@ function distance(a: Vector2, b: Vector2): number {
 
 function angle(from: Vector2, to: Vector2): number {
   return Math.atan2(to.y - from.y, to.x - from.x);
-}
-
-function clamp(val: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, val));
 }
 
 export function update(
@@ -51,11 +51,13 @@ export function update(
   state.mousePos = { ...input.mousePos };
 
   // Expire screen flash
-  if (
-    state.screenFlash &&
-    Date.now() - state.screenFlash.startTime >= state.screenFlash.duration
-  ) {
+  if (state.screenFlash && Date.now() - state.screenFlash.startTime >= state.screenFlash.duration) {
     state.screenFlash = null;
+  }
+
+  // Expire room entry text
+  if (state.roomEntryText && Date.now() - state.roomEntryText.startTime > 2200) {
+    state.roomEntryText = null;
   }
 
   // If in transition, don't update game state
@@ -66,6 +68,12 @@ export function update(
       state.player.x = state.transition.entryPoint.x;
       state.player.y = state.transition.entryPoint.y;
       state.transition = null;
+
+      // Show room label on entry
+      const newRoom = state.rooms.get(roomKey(state.currentRoom));
+      if (newRoom?.label) {
+        state.roomEntryText = { text: newRoom.label, startTime: Date.now() };
+      }
     }
     return;
   }
@@ -73,9 +81,7 @@ export function update(
   // Dialogue input
   if (state.dialogue.active) {
     if (input.isKeyDown(' ') || input.isKeyDown('enter')) {
-      const npc = getCurrentRoom(state)?.npcs.find(
-        (n) => n.id === state.dialogue.npcId
-      );
+      const npc = getCurrentRoom(state)?.npcs.find(n => n.id === state.dialogue.npcId);
       if (npc) {
         if (state.dialogue.currentLine < npc.dialogue.length - 1) {
           state.dialogue.currentLine++;
@@ -100,63 +106,54 @@ export function update(
   }
 
   // Shop pause
-  if (state.shopOpen) {
-    return;
-  }
+  if (state.shopOpen) return;
 
   // Inventory input
   if (input.isKeyDown('e')) {
     state.inventoryOpen = !state.inventoryOpen;
     input.keys.delete('e');
   }
+  if (state.inventoryOpen) return;
 
-  if (state.inventoryOpen) {
-    return;
-  }
-
-  // Hotbar selection (1-6)
+  // Hotbar selection (1-6): if already selected, use the item
   for (let i = 1; i <= 6; i++) {
     if (input.isKeyDown(i.toString())) {
-      state.player.selectedHotbarSlot = i - 1;
+      const slotIndex = i - 1;
+      if (state.player.selectedHotbarSlot === slotIndex) {
+        // Already selected — use the item
+        tryUseHotbarItem(state, slotIndex);
+      } else {
+        state.player.selectedHotbarSlot = slotIndex;
+      }
       input.keys.delete(i.toString());
     }
   }
 
   // Use hotbar item (Q)
   if (input.isKeyDown('q')) {
-    const itemId = state.player.hotbar[state.player.selectedHotbarSlot];
-    if (itemId) {
-      const item = ITEMS[itemId];
-      const room = getCurrentRoom(state);
-
-      if (item?.type === 'consumable' && item.healAmount) {
-        if (useConsumable(state.player, itemId)) {
-          addFloatingText(state, `Used ${item.name}`, state.player.x, state.player.y - 20);
-          // Remove from hotbar if depleted
-          const invItem = state.player.inventory.find((i) => i.itemId === itemId);
-          if (!invItem || invItem.quantity === 0) {
-            state.player.hotbar[state.player.selectedHotbarSlot] = null;
-          }
-        }
-      } else if (item?.type === 'active') {
-        // Special active item effects
-        if (item.effect === 'providence' && room) {
-          triggerProvidence(state, room);
-          removeItem(state.player, itemId, 1);
-          addFloatingText(state, 'Providence!', state.player.x, state.player.y - 30);
-          // Remove from hotbar if depleted
-          const invItem = state.player.inventory.find((i) => i.itemId === itemId);
-          if (!invItem || invItem.quantity === 0) {
-            state.player.hotbar[state.player.selectedHotbarSlot] = null;
-          }
-        }
-      }
-    }
+    tryUseHotbarItem(state, state.player.selectedHotbarSlot);
     input.keys.delete('q');
   }
 
   const room = getCurrentRoom(state);
   if (!room) return;
+
+  // Determine movement bounds (narrowed for hallways)
+  const wallPadding = PLAYER_HITBOX_RADIUS + 16; // 28
+  let xMin = wallPadding, xMax = ROOM_WIDTH - wallPadding;
+  let yMin = wallPadding, yMax = ROOM_HEIGHT - wallPadding;
+
+  if (room.roomType === 'hallway') {
+    if (room.hallwayDir === 'horizontal') {
+      // Corridor runs through center rows 3-6 (tiles), with a bit of padding
+      yMin = Math.max(wallPadding, 3 * TILE_SIZE + 4);
+      yMax = Math.min(ROOM_HEIGHT - wallPadding, 7 * TILE_SIZE - 4);
+    } else {
+      // Vertical corridor through center columns 6-8
+      xMin = Math.max(wallPadding, 6 * TILE_SIZE + 4);
+      xMax = Math.min(ROOM_WIDTH - wallPadding, 9 * TILE_SIZE - 4);
+    }
+  }
 
   // Player movement (WASD)
   const moveDir = { x: 0, y: 0 };
@@ -173,18 +170,12 @@ export function update(
     const newX = state.player.x + moveDir.x * state.player.speed * dt;
     const newY = state.player.y + moveDir.y * state.player.speed * dt;
 
-    const wallPadding = PLAYER_HITBOX_RADIUS + 16;
-    const canMove =
-      newX >= wallPadding &&
-      newX <= ROOM_WIDTH - wallPadding &&
-      newY >= wallPadding &&
-      newY <= ROOM_HEIGHT - wallPadding;
+    const canMove = newX >= xMin && newX <= xMax && newY >= yMin && newY <= yMax;
 
     let enemyCollision = false;
     for (const enemy of room.enemies) {
       if (enemy.dead) continue;
-      const dist = distance({ x: newX, y: newY }, enemy);
-      if (dist < PLAYER_HITBOX_RADIUS + ENEMY_HITBOX_RADIUS) {
+      if (distance({ x: newX, y: newY }, enemy) < PLAYER_HITBOX_RADIUS + ENEMY_HITBOX_RADIUS) {
         enemyCollision = true;
         break;
       }
@@ -192,8 +183,7 @@ export function update(
 
     let npcCollision = false;
     for (const npc of room.npcs) {
-      const dist = distance({ x: newX, y: newY }, npc);
-      if (dist < PLAYER_HITBOX_RADIUS + NPC_HITBOX_RADIUS) {
+      if (distance({ x: newX, y: newY }, npc) < PLAYER_HITBOX_RADIUS + NPC_HITBOX_RADIUS) {
         npcCollision = true;
         break;
       }
@@ -222,17 +212,31 @@ export function update(
     }
   }
 
-  // Check NPC interaction
+  // NPC interaction
   state.nearbyNpc = null;
   for (const npc of room.npcs) {
     const dist = distance(state.player, npc);
-    if (dist < 40) {
+    if (dist < 45) {
       state.nearbyNpc = npc.id;
       if (input.isKeyDown('f')) {
         if (npc.isShopkeeper) {
-          // Open the shop overlay (React handles the display)
           state.shopOpen = true;
-        } else {
+        } else if (npc.isShrine && !npc.shrineUsed) {
+          // Shrine blessing
+          npc.shrineUsed = true;
+          const effect = npc.shrineEffect ?? 'hp';
+          if (effect === 'hp') {
+            state.player.maxHp += 25;
+            state.player.hp = Math.min(state.player.maxHp, state.player.hp + 25);
+            addFloatingText(state, '+25 MAX HP!', state.player.x, state.player.y - 30);
+          } else if (effect === 'atk') {
+            addFloatingText(state, '+10 ATK!', state.player.x, state.player.y - 30);
+          }
+          state.screenFlash = { color: '#aaddff', alpha: 0.35, startTime: Date.now(), duration: 500 };
+          state.dialogue.active = true;
+          state.dialogue.npcId = npc.id;
+          state.dialogue.currentLine = 0;
+        } else if (!npc.isShrine) {
           state.dialogue.active = true;
           state.dialogue.npcId = npc.id;
           state.dialogue.currentLine = 0;
@@ -246,8 +250,7 @@ export function update(
   // Item pickup
   for (let i = room.items.length - 1; i >= 0; i--) {
     const item = room.items[i];
-    const dist = distance(state.player, item);
-    if (dist < ITEM_PICKUP_RADIUS) {
+    if (distance(state.player, item) < ITEM_PICKUP_RADIUS) {
       addItem(state.player, item.itemId, 1);
       const itemDef = ITEMS[item.itemId];
       addFloatingText(state, `+${itemDef?.name ?? item.itemId}`, item.x, item.y - 10);
@@ -256,12 +259,31 @@ export function update(
     }
   }
 
+  // Trap damage (trap rooms)
+  if (room.traps && room.traps.length > 0) {
+    const now = Date.now();
+    const playerTileX = Math.floor(state.player.x / TILE_SIZE);
+    const playerTileY = Math.floor(state.player.y / TILE_SIZE);
+    for (const trap of room.traps) {
+      if (Math.abs(trap.tileX - playerTileX) <= 1 && Math.abs(trap.tileY - playerTileY) <= 1) {
+        if (now - trap.lastTriggerTime >= trap.cooldownMs) {
+          trap.lastTriggerTime = now;
+          trap.triggerFlash = 1;
+          damagePlayer(state, trap.damage);
+          addFloatingText(state, 'TRAP!', state.player.x, state.player.y - 20);
+        }
+      }
+      // Decay flash
+      if (trap.triggerFlash > 0) {
+        trap.triggerFlash = Math.max(0, trap.triggerFlash - dt * 3);
+      }
+    }
+  }
+
   // Enemy AI
   for (const enemy of room.enemies) {
     if (enemy.dead) continue;
-
     const distToPlayer = distance(enemy, state.player);
-
     if (distToPlayer < 180) enemy.aggro = true;
 
     if (enemy.aggro) {
@@ -305,15 +327,9 @@ export function update(
     if (enemy.damageFlashTime > 0) enemy.damageFlashTime -= dt;
   }
 
-  // Remove old damage numbers
-  state.damageNumbers = state.damageNumbers.filter(
-    (dn) => Date.now() - dn.startTime < dn.duration
-  );
-
-  // Remove old floating texts
-  state.floatingTexts = state.floatingTexts.filter(
-    (ft) => Date.now() - ft.startTime < ft.duration
-  );
+  // Remove old damage numbers and floating texts
+  state.damageNumbers = state.damageNumbers.filter(dn => Date.now() - dn.startTime < dn.duration);
+  state.floatingTexts = state.floatingTexts.filter(ft => Date.now() - ft.startTime < ft.duration);
 
   // Clear attack arc
   if (state.attackArc && Date.now() - state.attackArc.startTime >= state.attackArc.duration) {
@@ -325,17 +341,11 @@ export function update(
     if (enemy.dead && enemy.enemyType === 'chaser' && !enemy.exploded) {
       if (Date.now() >= (enemy.explodeTime ?? Infinity)) {
         enemy.exploded = true;
-        const dist = distance(state.player, enemy);
-        if (dist <= (enemy.explodeRadius ?? 90)) {
+        if (distance(state.player, enemy) <= (enemy.explodeRadius ?? 90)) {
           damagePlayer(state, enemy.explodeDamage ?? 40);
           addFloatingText(state, 'BOOM!', enemy.x, enemy.y - 30);
         }
-        state.screenFlash = {
-          color: '#ff3300',
-          alpha: 0.55,
-          startTime: Date.now(),
-          duration: 350,
-        };
+        state.screenFlash = { color: '#ff3300', alpha: 0.55, startTime: Date.now(), duration: 350 };
       }
     }
   }
@@ -344,9 +354,7 @@ export function update(
   for (let i = room.enemies.length - 1; i >= 0; i--) {
     const enemy = room.enemies[i];
     if (!enemy.dead) continue;
-
     if (enemy.enemyType === 'chaser') {
-      // Remove 600 ms after explosion fires
       if (enemy.exploded && Date.now() - (enemy.explodeTime ?? enemy.deathTime) > 600) {
         room.enemies.splice(i, 1);
       }
@@ -356,15 +364,38 @@ export function update(
   }
 }
 
-function getCurrentRoom(state: GameState) {
+function tryUseHotbarItem(state: GameState, slotIndex: number): void {
+  const itemId = state.player.hotbar[slotIndex];
+  if (!itemId) return;
+  const item = ITEMS[itemId];
+  const room = getCurrentRoom(state);
+
+  if (item?.type === 'consumable' && item.healAmount) {
+    if (useConsumable(state.player, itemId)) {
+      addFloatingText(state, `+${item.healAmount} HP`, state.player.x, state.player.y - 20);
+      const invItem = state.player.inventory.find(i => i.itemId === itemId);
+      if (!invItem || invItem.quantity === 0) {
+        state.player.hotbar[slotIndex] = null;
+      }
+    }
+  } else if (item?.type === 'active') {
+    if (item.effect === 'providence' && room) {
+      triggerProvidence(state, room);
+      removeItem(state.player, itemId, 1);
+      addFloatingText(state, 'Providence!', state.player.x, state.player.y - 30);
+      const invItem = state.player.inventory.find(i => i.itemId === itemId);
+      if (!invItem || invItem.quantity === 0) {
+        state.player.hotbar[slotIndex] = null;
+      }
+    }
+  }
+}
+
+function getCurrentRoom(state: GameState): Room | undefined {
   return state.rooms.get(roomKey(state.currentRoom));
 }
 
-function performPlayerAttack(
-  state: GameState,
-  canvasWidth: number,
-  canvasHeight: number
-): void {
+function performPlayerAttack(state: GameState, canvasWidth: number, canvasHeight: number): void {
   const room = getCurrentRoom(state);
   if (!room) return;
 
@@ -402,7 +433,6 @@ function performPlayerAttack(
       if (enemy.hp <= 0) {
         enemy.dead = true;
         enemy.deathTime = Date.now();
-        // Chasers get an explosion countdown
         if (enemy.enemyType === 'chaser' && enemy.explodeDelay !== undefined) {
           enemy.explodeTime = enemy.deathTime + enemy.explodeDelay;
           enemy.exploded = false;
@@ -423,18 +453,14 @@ function performPlayerAttack(
   }
 }
 
-function triggerProvidence(state: GameState, room: typeof state.rooms extends Map<string, infer R> ? R : never): void {
-  let hitCount = 0;
+function triggerProvidence(state: GameState, room: Room): void {
   for (const enemy of room.enemies) {
     if (enemy.dead) continue;
-    const dist = distance(state.player, enemy);
-    if (dist <= PROVIDENCE_RADIUS) {
+    if (distance(state.player, enemy) <= PROVIDENCE_RADIUS) {
       const dmg = Math.max(1, Math.round(enemy.maxHp * 0.4));
       enemy.hp -= dmg;
       enemy.damageFlashTime = 0.4;
       addDamageNumber(state, dmg, '#ffe44d', enemy.x, enemy.y - 20);
-      hitCount++;
-
       if (enemy.hp <= 0) {
         enemy.dead = true;
         enemy.deathTime = Date.now();
@@ -448,14 +474,7 @@ function triggerProvidence(state: GameState, room: typeof state.rooms extends Ma
       }
     }
   }
-
-  // Lightning flash
-  state.screenFlash = {
-    color: '#ffffcc',
-    alpha: 0.75,
-    startTime: Date.now(),
-    duration: 450,
-  };
+  state.screenFlash = { color: '#ffffcc', alpha: 0.75, startTime: Date.now(), duration: 450 };
 }
 
 function damagePlayer(state: GameState, damage: number): void {
@@ -465,13 +484,7 @@ function damagePlayer(state: GameState, damage: number): void {
   if (state.player.hp <= 0) state.player.hp = 0;
 }
 
-function addDamageNumber(
-  state: GameState,
-  value: number,
-  color: string,
-  x: number,
-  y: number
-): void {
+function addDamageNumber(state: GameState, value: number, color: string, x: number, y: number): void {
   state.damageNumbers.push({
     id: `dmg-${Date.now()}-${Math.random()}`,
     x, y, value, color,
@@ -490,17 +503,17 @@ function addFloatingText(state: GameState, text: string, x: number, y: number): 
 }
 
 function isPlayerAtDoorway(player: Vector2, doorway: Doorway): boolean {
-  const padding = 16;
-  const doorCenter = DOORWAY_WIDTH / 2;
+  const T = DOOR_THRESHOLD;
+  const hw = DOORWAY_HALF_WIDTH;
   switch (doorway.side) {
     case 'north':
-      return player.y < padding + 10 && player.x > ROOM_WIDTH / 2 - doorCenter && player.x < ROOM_WIDTH / 2 + doorCenter;
+      return player.y < T && player.x > ROOM_WIDTH / 2 - hw && player.x < ROOM_WIDTH / 2 + hw;
     case 'south':
-      return player.y > ROOM_HEIGHT - padding - 10 && player.x > ROOM_WIDTH / 2 - doorCenter && player.x < ROOM_WIDTH / 2 + doorCenter;
+      return player.y > ROOM_HEIGHT - T && player.x > ROOM_WIDTH / 2 - hw && player.x < ROOM_WIDTH / 2 + hw;
     case 'east':
-      return player.x > ROOM_WIDTH - padding - 10 && player.y > ROOM_HEIGHT / 2 - doorCenter && player.y < ROOM_HEIGHT / 2 + doorCenter;
+      return player.x > ROOM_WIDTH - T && player.y > ROOM_HEIGHT / 2 - hw && player.y < ROOM_HEIGHT / 2 + hw;
     case 'west':
-      return player.x < padding + 10 && player.y > ROOM_HEIGHT / 2 - doorCenter && player.y < ROOM_HEIGHT / 2 + doorCenter;
+      return player.x < T && player.y > ROOM_HEIGHT / 2 - hw && player.y < ROOM_HEIGHT / 2 + hw;
   }
 }
 
@@ -508,15 +521,30 @@ function startRoomTransition(state: GameState, doorway: Doorway): void {
   const toRoomKey = roomKey(doorway.toRoom);
   if (!state.rooms.has(toRoomKey)) return;
 
+  // Mark destination as visited
+  state.visitedRooms.add(toRoomKey);
+
   let entryX = ROOM_WIDTH / 2;
   let entryY = ROOM_HEIGHT / 2;
   const padding = 40;
 
-  switch (doorway.side) {
-    case 'north': entryY = ROOM_HEIGHT - padding; break;
-    case 'south': entryY = padding; break;
-    case 'east':  entryX = padding; break;
-    case 'west':  entryX = ROOM_WIDTH - padding; break;
+  // For hallway rooms, spawn player in the corridor center
+  const destRoom = state.rooms.get(toRoomKey);
+  if (destRoom?.roomType === 'hallway') {
+    if (destRoom.hallwayDir === 'horizontal') {
+      entryY = ROOM_HEIGHT / 2;
+      entryX = doorway.side === 'east' ? padding : ROOM_WIDTH - padding;
+    } else {
+      entryX = ROOM_WIDTH / 2;
+      entryY = doorway.side === 'south' ? padding : ROOM_HEIGHT - padding;
+    }
+  } else {
+    switch (doorway.side) {
+      case 'north': entryY = ROOM_HEIGHT - padding; break;
+      case 'south': entryY = padding; break;
+      case 'east':  entryX = padding; break;
+      case 'west':  entryX = ROOM_WIDTH - padding; break;
+    }
   }
 
   state.transition = {

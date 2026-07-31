@@ -1,6 +1,7 @@
 export type HairStyle = 'bald' | 'buzz' | 'short' | 'long' | 'ponytail' | 'spiky' | 'mohawk';
 export type Accessory = 'none' | 'glasses' | 'beard' | 'earrings';
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'chromatic';
+export type RoomType = 'normal' | 'shop' | 'treasure' | 'trap' | 'advancement' | 'hallway';
 
 export interface SpriteAppearance {
   cloth: string;
@@ -54,6 +55,16 @@ export interface FloorItem {
   spawnTime: number;
 }
 
+export interface Trap {
+  id: string;
+  tileX: number;
+  tileY: number;
+  damage: number;
+  cooldownMs: number;
+  lastTriggerTime: number;
+  triggerFlash: number; // animation timer
+}
+
 export interface Player {
   x: number;
   y: number;
@@ -92,10 +103,10 @@ export interface Enemy {
   isBoss?: boolean;
   bossName?: string;
   // Explosion (chaser)
-  explodeDelay?: number;   // ms after death before exploding
+  explodeDelay?: number;
   explodeRadius?: number;
   explodeDamage?: number;
-  explodeTime?: number;    // Date.now() + explodeDelay, set on death
+  explodeTime?: number;
   exploded?: boolean;
 }
 
@@ -107,6 +118,10 @@ export interface NPC {
   dialogue: string[];
   appearance: SpriteAppearance;
   isShopkeeper?: boolean;
+  // Advancement shrine
+  isShrine?: boolean;
+  shrineUsed?: boolean;
+  shrineEffect?: 'atk' | 'hp' | 'speed';
 }
 
 export interface Doorway {
@@ -120,6 +135,11 @@ export interface Room {
   npcs: NPC[];
   items: FloorItem[];
   doorways: Doorway[];
+  roomType?: RoomType;
+  hallwayDir?: 'horizontal' | 'vertical';
+  traps?: Trap[];
+  // Label for minimap / entry text
+  label?: string;
 }
 
 export interface DamageNumber {
@@ -187,4 +207,6 @@ export interface GameState {
   nearbyNpc: string | null;
   time: number;
   screenFlash: ScreenFlash | null;
+  visitedRooms: Set<string>;
+  roomEntryText: { text: string; startTime: number } | null;
 }

@@ -92,6 +92,8 @@ export default function GameCanvas() {
         nearbyNpc: null,
         time: 0,
         screenFlash: null,
+        visitedRooms: new Set<string>(['0,0']),
+        roomEntryText: null,
       };
     }
 

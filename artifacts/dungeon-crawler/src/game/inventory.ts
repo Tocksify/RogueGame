@@ -35,9 +35,7 @@ export function equipItem(player: Player, itemId: string): void {
         ? 'armor'
         : item.type === 'offhand'
           ? 'offhand'
-          : item.type === 'accessory'
-            ? 'accessory'
-            : null;
+          : null;
 
   if (!slot) return;
 
