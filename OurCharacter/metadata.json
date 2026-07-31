@@ -1,0 +1,137 @@
+{
+  "group_id": "b00038bb-bb8d-4cf4-b2c1-108356d55561",
+  "states": [
+    {
+      "character": {
+        "id": "25831026-e8f8-48f2-821b-55fa38c5a608",
+        "name": "Idle",
+        "prompt": "White skin, black hair, black clothes. With a dagger in a standoffish pose. Black jacket, white shirt, black pants, black boots, brown belt",
+        "size": {
+          "width": 96,
+          "height": 96
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "low top-down",
+        "created_at": "2026-07-31T08:00:34.700793+00:00"
+      },
+      "folder": "Idle",
+      "frames": {
+        "rotations": {
+          "south": "Idle/rotations/south.png",
+          "south-east": "Idle/rotations/south-east.png",
+          "east": "Idle/rotations/east.png",
+          "north-east": "Idle/rotations/north-east.png",
+          "north": "Idle/rotations/north.png",
+          "north-west": "Idle/rotations/north-west.png",
+          "west": "Idle/rotations/west.png",
+          "south-west": "Idle/rotations/south-west.png"
+        },
+        "animations": {}
+      }
+    },
+    {
+      "character": {
+        "id": "232c60c4-bff2-42a1-9d8f-b3b3fc69df8e",
+        "name": "Running",
+        "prompt": "White skin, black hair, black clothes. With a dagger in a standoffish pose. Black jacket, white shirt, black pants, black boots, brown belt",
+        "size": {
+          "width": 96,
+          "height": 96
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "low top-down",
+        "created_at": "2026-07-31T08:00:49.998101+00:00"
+      },
+      "folder": "Running",
+      "frames": {
+        "rotations": {
+          "south": "Running/rotations/south.png",
+          "south-east": "Running/rotations/south-east.png",
+          "east": "Running/rotations/east.png",
+          "north-east": "Running/rotations/north-east.png",
+          "north": "Running/rotations/north.png",
+          "north-west": "Running/rotations/north-west.png",
+          "west": "Running/rotations/west.png",
+          "south-west": "Running/rotations/south-west.png"
+        },
+        "animations": {
+          "Full_Sprint": {
+            "west": [
+              "Running/animations/Full_Sprint/west/frame_000.png",
+              "Running/animations/Full_Sprint/west/frame_001.png",
+              "Running/animations/Full_Sprint/west/frame_002.png",
+              "Running/animations/Full_Sprint/west/frame_003.png",
+              "Running/animations/Full_Sprint/west/frame_004.png",
+              "Running/animations/Full_Sprint/west/frame_005.png",
+              "Running/animations/Full_Sprint/west/frame_006.png",
+              "Running/animations/Full_Sprint/west/frame_007.png"
+            ],
+            "north": [
+              "Running/animations/Full_Sprint/north/frame_000.png",
+              "Running/animations/Full_Sprint/north/frame_001.png",
+              "Running/animations/Full_Sprint/north/frame_002.png",
+              "Running/animations/Full_Sprint/north/frame_003.png",
+              "Running/animations/Full_Sprint/north/frame_004.png",
+              "Running/animations/Full_Sprint/north/frame_005.png",
+              "Running/animations/Full_Sprint/north/frame_006.png",
+              "Running/animations/Full_Sprint/north/frame_007.png"
+            ],
+            "south": [
+              "Running/animations/Full_Sprint/south/frame_000.png",
+              "Running/animations/Full_Sprint/south/frame_001.png",
+              "Running/animations/Full_Sprint/south/frame_002.png",
+              "Running/animations/Full_Sprint/south/frame_003.png",
+              "Running/animations/Full_Sprint/south/frame_004.png",
+              "Running/animations/Full_Sprint/south/frame_005.png",
+              "Running/animations/Full_Sprint/south/frame_006.png",
+              "Running/animations/Full_Sprint/south/frame_007.png"
+            ],
+            "east": [
+              "Running/animations/Full_Sprint/east/frame_000.png",
+              "Running/animations/Full_Sprint/east/frame_001.png",
+              "Running/animations/Full_Sprint/east/frame_002.png",
+              "Running/animations/Full_Sprint/east/frame_003.png",
+              "Running/animations/Full_Sprint/east/frame_004.png",
+              "Running/animations/Full_Sprint/east/frame_005.png",
+              "Running/animations/Full_Sprint/east/frame_006.png",
+              "Running/animations/Full_Sprint/east/frame_007.png"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "character": {
+        "id": "d629234d-2b11-4b53-946c-588144831023",
+        "name": "Attacking, swings hi",
+        "prompt": "White skin, black hair, black clothes. With a dagger in a standoffish pose. Black jacket, white shirt, black pants, black boots, brown belt",
+        "size": {
+          "width": 96,
+          "height": 96
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "low top-down",
+        "created_at": "2026-07-31T08:23:43.167096+00:00"
+      },
+      "folder": "Attacking_swings_hi",
+      "frames": {
+        "rotations": {
+          "south": "Attacking_swings_hi/rotations/south.png",
+          "south-east": "Attacking_swings_hi/rotations/south-east.png",
+          "east": "Attacking_swings_hi/rotations/east.png",
+          "north-east": "Attacking_swings_hi/rotations/north-east.png",
+          "north": "Attacking_swings_hi/rotations/north.png",
+          "north-west": "Attacking_swings_hi/rotations/north-west.png",
+          "west": "Attacking_swings_hi/rotations/west.png",
+          "south-west": "Attacking_swings_hi/rotations/south-west.png"
+        },
+        "animations": {}
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-07-31T08:29:39.020325"
+}

@@ -1,54 +1,45 @@
 # Dungeon Crawler
 
-A top-down tile-based dungeon crawler game with a React canvas frontend and an Express API backend.
+A canvas-based dungeon crawler game built with React/Vite, an Express API backend, and PostgreSQL via Drizzle ORM.
 
-## Run & Operate
+## Project structure
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+```
+artifacts/
+  dungeon-crawler/   — React/Vite frontend (the game)
+  api-server/        — Express API backend
+  mockup-sandbox/    — Design canvas preview server
+lib/
+  api-client-react/  — Shared React API client
+  api-spec/          — Shared API spec
+  api-zod/           — Shared Zod schemas
+  db/                — Drizzle ORM + PostgreSQL schema
+```
+
+## Running the project
+
+| Service | Workflow |
+|---------|----------|
+| Game (frontend) | `artifacts/dungeon-crawler: web` — `pnpm --filter @workspace/dungeon-crawler run dev` |
+| API server | `artifacts/api-server: API Server` — `pnpm --filter @workspace/api-server run dev` |
+
+Dependencies are managed with `pnpm` at the workspace root. Run `pnpm install` to install all packages.
+
+## Database
+
+Uses Replit's built-in PostgreSQL. The `DATABASE_URL` environment variable is provided automatically. Schema is defined in `lib/db/src/schema/` using Drizzle ORM. Push schema changes with:
+
+```sh
+cd lib/db && pnpm run push
+```
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
-
-## Where things live
-
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
-
-## Architecture decisions
-
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
-
-## Product
-
-A top-down dungeon crawler with:
-- WASD movement, left-click melee combat with attack arc
-- Full rarity system: Common → Uncommon → Rare → Epic → Legendary → **Chromatic** (animated rainbow)
-- 29 items across weapons, armor, perks (passive), and active/consumable hotbar items
-- Shop merchant in the starter room — sells every item in the game, priced by rarity
-- 999,999 starting gold for testing (all items purchasable)
-- Categorized inventory (Weapons / Armor / Perks / Items) with hotbar assignment
-- Providence: legendary active item — lightning bolt deals 40% max HP to all nearby enemies
-- Creed + Chromacy: opposing Chromatic perks — held together grant synergy bonuses (+15 ATK, +20 HP)
-- Floor item drops glow with their rarity color; Chromatic items animate with a rainbow gradient
+- **Frontend:** React 19, Vite 7, Tailwind CSS 4, Wouter, shadcn/ui components
+- **Backend:** Express 5, Pino (logging)
+- **Database:** PostgreSQL, Drizzle ORM
+- **Language:** TypeScript throughout
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
-
-## Gotchas
-
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+<!-- Add any preferences the user asks you to remember here -->
