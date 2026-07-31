@@ -1,7 +1,68 @@
-import { GameState, Doorway, Rarity, Room, RoomType } from './types';
+import { GameState, Doorway, Enemy, Rarity, Room, RoomType } from './types';
 import { drawSprite, PLAYER_APPEARANCE } from './sprite';
 import { drawPlayerSprite } from './playerSprite';
+import { drawBat, drawSkeleton, SKEL_ROW_WALK } from './enemySprite';
 import { roomKey, ROOM_WIDTH, ROOM_HEIGHT, TILE_SIZE, ITEMS, RARITY_COLORS } from './world';
+
+// ── TILESET ────────────────────────────────────────────────────────────
+let tilesetImg: HTMLImageElement | null = null;
+
+export async function loadTileset(base: string = ''): Promise<void> {
+  if (tilesetImg) return;
+  tilesetImg = await new Promise<HTMLImageElement>(resolve => {
+    const img = new Image();
+    img.onload  = () => resolve(img);
+    img.onerror = () => resolve(img); // resolve on failure — falls back to procedural
+    img.src = `${base}sprites/tileset-walls.png`;
+  });
+}
+
+// Source tile size (px) in the tileset image — 16 px tiles, drawn 2× at 32 px
+const TS_SRC = 16;
+
+// Tile positions (col, row) in the 16 px grid of walls_floor.png (208×368, 13×23)
+// Rows 0-6 → wall tiles; Rows 7-13 → floor tiles
+const STILE = {
+  WALL:    [0, 0] as const,   // solid stone wall block
+  CORNER:  [2, 0] as const,   // corner pillar variant
+  FLOOR_A: [0, 7] as const,   // primary stone floor
+  FLOOR_B: [1, 7] as const,   // alternate stone floor
+  FLOOR_M: [2, 7] as const,   // dark / mossy floor
+  FLOOR_H: [3, 7] as const,   // hollow corner floor
+};
+
+/** Blit a single 16-px source tile from the tileset, scaled to 32-px game tile. */
+function blitTile(ctx: CanvasRenderingContext2D, tx: number, ty: number, col: number, row: number): void {
+  if (!tilesetImg?.naturalWidth) return;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(
+    tilesetImg,
+    col * TS_SRC, row * TS_SRC, TS_SRC, TS_SRC,
+    Math.round(tx * TILE_SIZE), Math.round(ty * TILE_SIZE),
+    TILE_SIZE, TILE_SIZE,
+  );
+  ctx.restore();
+}
+
+/** Draw an enemy using its real sprite sheet (if available) or fall back to the procedural sprite. */
+function drawEnemySprite(
+  ctx: CanvasRenderingContext2D,
+  enemy: Enemy,
+  time: number,
+  alpha = 1,
+): void {
+  if (enemy.spriteType === 'bat') {
+    drawBat(ctx, enemy.x, enemy.y, time, alpha);
+  } else if (enemy.spriteType === 'skeleton') {
+    drawSkeleton(ctx, enemy.x, enemy.y, time, alpha, SKEL_ROW_WALK);
+  } else {
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    drawSprite(ctx, enemy.x - 16, enemy.y - 32, enemy.appearance);
+    ctx.restore();
+  }
+}
 
 // ── PALETTE ───────────────────────────────────────────────────────────
 const C = {
@@ -38,15 +99,37 @@ function drawTile(
   const y = Math.round(ty * TILE_SIZE);
   const TS = TILE_SIZE;
 
+  const useSheet = !!tilesetImg?.naturalWidth;
+
   switch (tile) {
-    case 'W': drawWall(ctx, x, y, TS); break;
-    case 'V': drawCornerPillar(ctx, x, y, TS); break;
-    case 'D': drawDoor(ctx, x, y, TS, frame); break;
-    case 'G': drawFloor(ctx, x, y, TS, tx, ty, 0); break;
-    case 'P': drawFloor(ctx, x, y, TS, tx, ty, 1); break;
-    case 'M': drawFloorMoss(ctx, x, y, TS); break;
-    case 'H': drawHollowCorner(ctx, x, y, TS); break;
-    case 'T': drawTorch(ctx, x, y, TS, frame); break;
+    case 'W':
+      if (useSheet) { blitTile(ctx, tx, ty, ...STILE.WALL);   } else { drawWall(ctx, x, y, TS); }
+      break;
+    case 'V':
+      if (useSheet) { blitTile(ctx, tx, ty, ...STILE.CORNER); } else { drawCornerPillar(ctx, x, y, TS); }
+      break;
+    case 'D':
+      // Floor base first, then animated door overlay
+      if (useSheet) blitTile(ctx, tx, ty, ...STILE.FLOOR_A);
+      drawDoor(ctx, x, y, TS, frame);
+      break;
+    case 'G':
+      if (useSheet) { blitTile(ctx, tx, ty, ...STILE.FLOOR_A); } else { drawFloor(ctx, x, y, TS, tx, ty, 0); }
+      break;
+    case 'P':
+      if (useSheet) { blitTile(ctx, tx, ty, ...STILE.FLOOR_B); } else { drawFloor(ctx, x, y, TS, tx, ty, 1); }
+      break;
+    case 'M':
+      if (useSheet) { blitTile(ctx, tx, ty, ...STILE.FLOOR_M); } else { drawFloorMoss(ctx, x, y, TS); }
+      break;
+    case 'H':
+      if (useSheet) { blitTile(ctx, tx, ty, ...STILE.FLOOR_H); } else { drawHollowCorner(ctx, x, y, TS); }
+      break;
+    case 'T':
+      // Floor base first, then animated torch overlay
+      if (useSheet) blitTile(ctx, tx, ty, ...STILE.FLOOR_A);
+      drawTorch(ctx, x, y, TS, frame);
+      break;
     default:
       ctx.fillStyle = C.dark;
       ctx.fillRect(x, y, TS, TS);
@@ -529,18 +612,18 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
         ctx.stroke();
         ctx.restore();
 
-        ctx.globalAlpha = 0.8;
-        drawSprite(ctx, enemy.x - 16, enemy.y - 32, enemy.appearance);
-        ctx.globalAlpha = 1;
+        ctx.save();
+        drawEnemySprite(ctx, enemy, frame / 60, 0.8);
+        ctx.restore();
       } else if (enemy.enemyType === 'chaser' && enemy.exploded) {
         const elapsed = Date.now() - (enemy.explodeTime ?? enemy.deathTime);
-        ctx.globalAlpha = 1 - Math.min(1, elapsed / 600);
-        drawSprite(ctx, enemy.x - 16, enemy.y - 32, enemy.appearance);
-        ctx.globalAlpha = 1;
+        ctx.save();
+        drawEnemySprite(ctx, enemy, frame / 60, 1 - Math.min(1, elapsed / 600));
+        ctx.restore();
       } else {
-        ctx.globalAlpha = 1 - Math.min(1, (Date.now() - enemy.deathTime) / 2000);
-        drawSprite(ctx, enemy.x - 16, enemy.y - 32, enemy.appearance);
-        ctx.globalAlpha = 1;
+        ctx.save();
+        drawEnemySprite(ctx, enemy, frame / 60, 1 - Math.min(1, (Date.now() - enemy.deathTime) / 2000));
+        ctx.restore();
       }
       continue;
     }
@@ -555,7 +638,9 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
       ctx.restore();
     }
 
-    drawSprite(ctx, enemy.x - 16, enemy.y - 32, enemy.appearance);
+    ctx.save();
+    drawEnemySprite(ctx, enemy, frame / 60);
+    ctx.restore();
 
     if (!enemy.isBoss) {
       const bw = 30, bh = 4;

@@ -6,6 +6,8 @@ import { InputState } from '../game/input';
 import { update } from '../game/gameLoop';
 import { render } from '../game/renderer';
 import { loadPlayerSprites } from '../game/playerSprite';
+import { loadEnemySprites } from '../game/enemySprite';
+import { loadTileset } from '../game/renderer';
 import { equipItem, unequipItem, removeItem, addItem, buyItem, recalculateStats } from '../game/inventory';
 
 // ── RAINBOW CSS ───────────────────────────────────────────────────────
@@ -59,8 +61,10 @@ export default function GameCanvas() {
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    // Load player sprite sheets (non-blocking — renders fall back to nothing until ready)
+    // Load sprite sheets and tileset (non-blocking — renders fall back gracefully until ready)
     loadPlayerSprites();
+    loadEnemySprites();
+    loadTileset();
 
     if (!gameStateRef.current) {
       const rooms = createWorld();

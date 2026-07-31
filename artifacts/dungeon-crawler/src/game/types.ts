@@ -111,6 +111,8 @@ export interface Enemy {
   explodeDamage?: number;
   explodeTime?: number;
   exploded?: boolean;
+  // Sprite-sheet override — when set, renderer uses real artwork instead of procedural sprite
+  spriteType?: 'bat' | 'skeleton';
 }
 
 export interface NPC {

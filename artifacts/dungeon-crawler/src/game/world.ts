@@ -279,6 +279,34 @@ function createEnemy(x: number, y: number, appearanceId: string, baseColor: stri
   };
 }
 
+function createBatEnemy(x: number, y: number): Enemy {
+  return {
+    id: `enemy-${enemyIdCounter++}`, x, y,
+    hp: 22, maxHp: 22, speed: 110, aggro: false,
+    lastAttackTime: 0, attackCooldown: 1000,
+    waypoint: null, waypointPauseUntil: 0,
+    appearance: getNpcAppearance('bat', '#6633aa'),
+    damageFlashTime: 0, dead: false, deathTime: 0,
+    dropItemId: 'health-potion', enemyType: 'standard',
+    spriteType: 'bat',
+  };
+}
+
+function createSkeletonBoss(): Enemy {
+  return {
+    id: `enemy-${enemyIdCounter++}`,
+    x: 240, y: 160,
+    hp: 400, maxHp: 400, speed: 60, aggro: false,
+    lastAttackTime: 0, attackCooldown: 1000,
+    waypoint: null, waypointPauseUntil: 0,
+    appearance: getNpcAppearance('skeleton-boss', '#c8e8ff'),
+    damageFlashTime: 0, dead: false, deathTime: 0,
+    dropItemId: 'godhead', enemyType: 'boss',
+    isBoss: true, bossName: 'Bone Lord',
+    spriteType: 'skeleton',
+  };
+}
+
 function createChaserEnemy(x: number, y: number): Enemy {
   return {
     id: `enemy-${enemyIdCounter++}`, x, y,
@@ -452,22 +480,24 @@ export function createWorld(): Map<string, Room> {
     { side: 'east', toRoom: { x: 1,   y: 0 } },
   ]));
 
-  // ── Room (1,0) — CHASER ROOM ──────────────────────────────────────────
+  // ── Room (1,0) — BAT CAVE (east of start) ────────────────────────────
   set({
     coord: { x: 1, y: 0 },
     enemies: [
-      createChaserEnemy(300, 100),
-      createChaserEnemy(150, 220),
-      createChaserEnemy(360, 210),
+      createBatEnemy(310, 90),
+      createBatEnemy(140, 200),
+      createBatEnemy(370, 220),
+      createBatEnemy(220, 130),
     ],
     npcs: [],
     items: [createFloorItem('health-potion', 100, 80)],
     doorways: [
-      { side: 'west', toRoom: { x: 0.5, y: 0   } },
+      { side: 'west',  toRoom: { x: 0.5, y: 0   } },
       { side: 'south', toRoom: { x: 1,   y: 0.5 } },
       { side: 'east',  toRoom: { x: 1.5, y: 0   } },
     ],
     roomType: 'normal',
+    label: 'BAT CAVE',
   });
 
   // ── Hallway (1,0)→(2,0) horizontal ───────────────────────────────────
@@ -488,10 +518,10 @@ export function createWorld(): Map<string, Room> {
     { side: 'south', toRoom: { x: 0, y: 1   } },
   ]));
 
-  // ── Room (0,1) — BOSS ARENA ───────────────────────────────────────────
+  // ── Room (0,1) — BONE LORD ARENA (south of start) ────────────────────
   set({
     coord: { x: 0, y: 1 },
-    enemies: [createGreedBoss()],
+    enemies: [createSkeletonBoss()],
     npcs: [],
     items: [],
     doorways: [
@@ -499,7 +529,7 @@ export function createWorld(): Map<string, Room> {
       { side: 'east',  toRoom: { x: 0.5, y: 1   } },
     ],
     roomType: 'normal',
-    label: 'BOSS',
+    label: 'BONE LORD',
   });
 
   // ── Hallway (0,1)→(1,1) horizontal ───────────────────────────────────

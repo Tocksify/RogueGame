@@ -1,0 +1,355 @@
+Your item system is starting to feel cohesive. The serious biblical/cosmic items mixed with a few goofy items like Chicken, Donut, and Sodie Pop give it personality without overwhelming the tone. Here’s the updated list.
+
+⸻
+
+⚔️ Weapons (6)
+
+Godhead
+
+A massive weapon forged from the petrified head of a dead god.
+
+* Very high damage.
+* Slow attack speed.
+* High stagger.
+
+Legacy
+
+An ancient weapon wielded by countless champions.
+
+* Kills grant Legacy stacks.
+* Each stack increases damage.
+* Lost upon death.
+
+Splinters
+
+A crude weapon made from sacred wood.
+
+* Fast attacks.
+* Low damage.
+* Causes Bleed.
+
+Gospel
+
+A scripture-covered spear.
+
+* Long reach.
+* Ignores part of enemy Defense.
+* Bonus damage to elites and bosses.
+
+Genesis
+
+The first sword.
+
+* Balanced stats.
+* Critical hits heal.
+* Every 20th hit releases a holy slash.
+
+Black Psalm
+
+A cursed scythe.
+
+* High damage.
+* Lifesteal.
+* Consecutive kills increase attack speed.
+
+⸻
+
+🛡 Armor (7)
+
+Dragon Head (Helmet)
+
+* High Defense.
+* Fire Resistance.
+* Increased Fear Resistance.
+
+Holy Mantle (Chest)
+
+* High Defense.
+* Holy Resistance.
+* Increased Status Resistance.
+
+Halo (Helmet)
+
+* Holy Resistance.
+* Curse Resistance.
+* Slight cooldown reduction.
+
+Pilgrimage (Boots)
+
+* Increased Movement Speed.
+* Faster stamina regeneration.
+
+Chains (Leg Armor)
+
+* Increased dodge distance.
+* Reduced knockback.
+* Reduced slows.
+
+Tunic (Chest)
+
+A simple cloth tunic worn by travelers.
+
+* Low Defense.
+* Cheap starter armor.
+* Slight stamina regeneration bonus.
+
+Saint’s Helm (Helmet)
+
+A blessed helmet worn by holy warriors.
+
+* High Defense.
+* Increased Holy Resistance.
+* Slight increase to Max HP.
+
+⸻
+
+✨ Skills (6)
+
+Providence
+
+Calls down divine lightning.
+
+* Heavy AoE damage.
+* Applies Shock.
+
+Birthright
+
+A powerful divine roar.
+
+* Weakens nearby enemies.
+* Buffs M1 damage.
+* Buffs M1 attack speed for the next several attacks.
+
+Right of Birth
+
+Commands enemies to kneel.
+
+* Silences enemies for 5 seconds.
+* Bosses are heavily slowed instead.
+
+Cell of God
+
+Summons a floating divine cell.
+
+* Attacks enemies.
+* Explodes at the end.
+* Explosion heals allies.
+
+World Seed
+
+Plants a healing tree.
+
+* Produces healing fruit throughout its duration.
+
+Primordial Cell
+
+Summons the first organism.
+
+* Evolves with every kill.
+* Explodes after 90 seconds.
+* Explosion scales with its size.
+
+⸻
+
+💠 Perks (8)
+
+Creed
+
+(Effect TBD.)
+
+Chromacy
+
+(Effect TBD.)
+
+Living Stone
+
+* Increased Defense.
+* Increased Poise.
+* Increased stagger resistance.
+
+Heart of Chimera
+
+* Increased Max HP.
+* Slight HP regeneration.
+
+Anomaly
+
+Consume impossible biology.
+
+* Increased HP.
+* Increased Defense.
+
+God Corpse
+
+Absorb a fallen deity.
+
+* Increased HP.
+* Increased Damage.
+* Increased Defense.
+* Increased Attack Speed.
+* Increased Movement Speed.
+
+Martyr
+
+Condition: Low HP.
+
+* Lower HP = Higher Damage.
+* Lower HP = Higher Attack Speed.
+
+Shepherd
+
+Condition: While summons are active.
+
+* Summons gain HP.
+* Summons gain Damage.
+* Summons gain Movement Speed.
+
+⸻
+
+🌟 Passives (5)
+
+Hollow God
+
+* Survive one lethal hit with 1 HP once per life.
+* Nearby enemies lose Resolve.
+* Occasionally releases void slashes.
+
+Divine Purpose
+
+Every 10th M1:
+
+* Bonus Holy damage.
+* Holy explosion.
+
+Fuego
+
+Every 10th M1:
+
+* Applies Burn.
+* Burn damage scales with your damage.
+
+Throne
+
+Every boss defeated:
+
+* Permanently increases HP.
+* Permanently increases Damage.
+* Permanently increases Defense.
+
+God Corpse’s Blessing (Unlocked by God Corpse)
+
+* Occasionally releases divine shockwaves while attacking.
+
+⸻
+
+📜 Relics (7)
+
+Testament
+
+Grants one random blessing for the current run.
+
+Seventh Seal
+
+Opens once.
+
+* Grants one random Legendary Blessing.
+
+Ark Fragment
+
+Each new floor grants a shield worth 15% Max HP.
+
+Oracle’s Eye
+
+* Reveals secret rooms.
+* Reveals hidden treasure.
+* Reveals hidden walls.
+* Increases Luck.
+
+Garden Fruit
+
+Permanently grants one random stat increase for the run.
+
+Chicken
+
+A surprisingly filling roasted chicken.
+
+Effect
+
+* Restores a large amount of HP (about 50–60%).
+* Removes Hunger (if you later add a hunger mechanic).
+
+Roasted Roast
+
+A massive roasted cut of meat.
+
+Effect
+
+* Fully restores HP.
+* Grants +10% Damage for 60 seconds.
+
+⸻
+
+🍎 Consumables (6)
+
+Health Potion
+
+A basic red healing potion.
+
+Effect
+
+* Restores a moderate amount of HP.
+
+Lamb’s Blood
+
+* Fully heals HP.
+* Removes all debuffs.
+* Grants temporary status immunity.
+
+Benediction
+
+Begins the Eggy Hunty event.
+
+Collect Eggies for bonus Gold.
+
+Finding at least 10 Eggies grants:
+
+* EggCrazy
+    * +5% Health Regeneration.
+    * +10% Max HP instantly.
+
+Also rewards:
+
+Sodie Pop
+
+* Permanently increases Movement Speed for the current run.
+
+First Flesh
+
+Transforms into any previously discovered item.
+
+* Takes several seconds to consume.
+
+Donut
+
+A sugary treat.
+
+Effect
+
+* Restores a small amount of HP.
+* Grants a short burst of Movement Speed and Stamina regeneration.
+
+⸻
+
+📊 Total Item Count
+
+* Weapons: 6
+* Armor: 7
+* Skills: 6
+* Perks: 8
+* Passives: 5
+* Relics: 7
+* Consumables: 6
+
+Total: 45 unique items
+
+At this point, your game has a nice balance of serious “divine relics” (Godhead, Testament, Hollow God) and lighthearted finds (Donut, Chicken, Sodie Pop). That contrast can make exploration more enjoyable while preserving the overall dark fantasy atmosphere.
