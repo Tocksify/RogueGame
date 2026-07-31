@@ -1,41 +1,33 @@
 # Dungeon Crawler
 
-A top-down dungeon crawler game built with React + Vite, backed by an Express API server and PostgreSQL database.
+A top-down dungeon crawler game built with React/Vite and an Express API backend.
 
 ## Stack
 
-- **Frontend** (`artifacts/dungeon-crawler`): React 19, Vite, TypeScript, Tailwind CSS, canvas-based game engine
-- **Backend** (`artifacts/api-server`): Express 5, TypeScript, Drizzle ORM, PostgreSQL
-- **Shared libs** (`lib/`): `api-zod` (shared Zod schemas), `api-spec`, `api-client-react` (React Query hooks), `db` (Drizzle schema + client)
-- **Game assets**: tilesets, enemy sprites, and character animations in the root directory (zip files + extracted folders)
+- **Frontend** (`artifacts/dungeon-crawler`): React + Vite + TypeScript, Tailwind CSS, game canvas rendered via HTML Canvas
+- **Backend** (`artifacts/api-server`): Express 5, Drizzle ORM, pino logging
+- **Monorepo**: pnpm workspaces
 
-## How to run
+## Running the project
 
-Two workflows run in parallel:
+Both workflows are pre-configured in Replit:
 
-| Workflow | Command | Port |
-|---|---|---|
-| `artifacts/dungeon-crawler: web` | `pnpm --filter @workspace/dungeon-crawler run dev` | 21601 |
-| `artifacts/api-server: API Server` | `pnpm --filter @workspace/api-server run dev` | 8080 |
+- **Dungeon Crawler (web)** — `pnpm --filter @workspace/dungeon-crawler run dev` — game frontend, preview at port 21601
+- **API Server** — `pnpm --filter @workspace/api-server run dev` — REST API, runs on port 8080
 
-Both are configured as managed artifact workflows and start automatically.
-
-## Environment
-
-- `DATABASE_URL` — runtime-managed by Replit (PostgreSQL, already provisioned)
-- `SESSION_SECRET` — stored as a Replit Secret
-- `PORT`, `BASE_PATH` — injected automatically by the artifact runner
-
-## Database schema
-
-Schema lives in `lib/db/src/schema/`. Currently empty — add tables there and run `pnpm --filter @workspace/db run push` to apply to the dev database.
-
-## Package management
-
-Uses pnpm workspaces. Install all dependencies from the root:
-
+To install dependencies after pulling changes:
 ```
 pnpm install
 ```
 
+## Asset files
+
+Game assets live at the repo root (not inside `artifacts/`):
+- `Tileset/PNG/` — dungeon floor/wall tileset and animations
+- `OurCharacter/` — player character sprites
+- `RogueEnemies/` — enemy sprite sheets
+- `Idle_new/` — additional character animations
+
 ## User preferences
+
+- Keep existing monorepo structure (pnpm workspaces)
