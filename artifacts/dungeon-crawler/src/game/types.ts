@@ -217,4 +217,5 @@ export interface GameState {
   visitedRooms: Set<string>;
   roomEntryText: { text: string; startTime: number } | null;
   itemPickupBanner: { text: string; startTime: number } | null;
+  justTransitioned: boolean;
 }

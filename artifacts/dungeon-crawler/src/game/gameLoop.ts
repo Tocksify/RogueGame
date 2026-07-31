@@ -106,6 +106,7 @@ export function update(
       state.player.x = state.transition.entryPoint.x;
       state.player.y = state.transition.entryPoint.y;
       state.transition = null;
+      state.justTransitioned = true;
 
       // Show room label on entry + play room-type sound
       const newRoom = state.rooms.get(roomKey(state.currentRoom));
@@ -260,11 +261,18 @@ export function update(
   }
 
   // Check doorway transitions
-  for (const doorway of room.doorways) {
-    if (isPlayerAtDoorway(state.player, doorway)) {
-      sfxDoorEnter();
-      startRoomTransition(state, doorway);
-      return;
+  // If we just arrived via a transition, suppress triggers until the player
+  // steps off every doorway zone (prevents instant bounce-back).
+  const atAnyDoorway = room.doorways.some(d => isPlayerAtDoorway(state.player, d));
+  if (state.justTransitioned) {
+    if (!atAnyDoorway) state.justTransitioned = false;
+  } else {
+    for (const doorway of room.doorways) {
+      if (isPlayerAtDoorway(state.player, doorway)) {
+        sfxDoorEnter();
+        startRoomTransition(state, doorway);
+        return;
+      }
     }
   }
 

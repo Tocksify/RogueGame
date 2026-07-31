@@ -106,6 +106,7 @@ export default function GameCanvas() {
         visitedRooms: new Set<string>(['0,0']),
         roomEntryText: null,
         itemPickupBanner: null,
+        justTransitioned: false,
       };
     }
 
