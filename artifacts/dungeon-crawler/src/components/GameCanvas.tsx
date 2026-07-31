@@ -1,11 +1,40 @@
 import { useEffect, useRef, useState } from 'react';
-import { GameState, Player, EquippedItems } from '../game/types';
-import { createWorld, roomKey, ITEMS } from '../game/world';
+import { GameState, Player, EquippedItems, Rarity } from '../game/types';
+import { createWorld, roomKey, ITEMS, getShopInventory, RARITY_COLORS, RARITY_PRICES } from '../game/world';
 import { PLAYER_APPEARANCE } from '../game/sprite';
 import { InputState } from '../game/input';
 import { update } from '../game/gameLoop';
 import { render } from '../game/renderer';
-import { equipItem, unequipItem, removeItem, addItem } from '../game/inventory';
+import { equipItem, unequipItem, removeItem, addItem, buyItem, recalculateStats } from '../game/inventory';
+
+// ── RAINBOW CSS ───────────────────────────────────────────────────────
+const RAINBOW_STYLE = `
+@keyframes rainbowBorder {
+  0%   { box-shadow: 0 0 0 2px hsl(0,100%,60%),   0 0 8px 1px hsl(0,100%,60%); }
+  16%  { box-shadow: 0 0 0 2px hsl(60,100%,60%),  0 0 8px 1px hsl(60,100%,60%); }
+  33%  { box-shadow: 0 0 0 2px hsl(120,100%,60%), 0 0 8px 1px hsl(120,100%,60%); }
+  50%  { box-shadow: 0 0 0 2px hsl(180,100%,60%), 0 0 8px 1px hsl(180,100%,60%); }
+  66%  { box-shadow: 0 0 0 2px hsl(240,100%,60%), 0 0 8px 1px hsl(240,100%,60%); }
+  83%  { box-shadow: 0 0 0 2px hsl(300,100%,60%), 0 0 8px 1px hsl(300,100%,60%); }
+  100% { box-shadow: 0 0 0 2px hsl(360,100%,60%), 0 0 8px 1px hsl(360,100%,60%); }
+}
+@keyframes rainbowText {
+  0%   { color: hsl(0,100%,70%);   }
+  16%  { color: hsl(60,100%,70%);  }
+  33%  { color: hsl(120,100%,70%); }
+  50%  { color: hsl(180,100%,70%); }
+  66%  { color: hsl(240,100%,70%); }
+  83%  { color: hsl(300,100%,70%); }
+  100% { color: hsl(360,100%,70%); }
+}
+.chromatic-border {
+  animation: rainbowBorder 2s linear infinite;
+  border: 1px solid transparent !important;
+}
+.chromatic-text {
+  animation: rainbowText 2s linear infinite;
+}
+`;
 
 export default function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -15,14 +44,13 @@ export default function GameCanvas() {
   const lastTimeRef = useRef<number>(0);
 
   const [inventoryOpen, setInventoryOpen] = useState(false);
-  const [inventoryCursor, setInventoryCursor] = useState(0);
+  const [shopOpen, setShopOpen] = useState(false);
   const [, setForceUpdate] = useState(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Resize canvas to window
     const resizeCanvas = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -30,7 +58,6 @@ export default function GameCanvas() {
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    // Initialize game state
     if (!gameStateRef.current) {
       const rooms = createWorld();
       const player: Player = {
@@ -43,14 +70,10 @@ export default function GameCanvas() {
         lastAttackTime: 0,
         damageFlashTime: 0,
         inventory: [],
-        equipped: {
-          weapon: null,
-          armor: null,
-          offhand: null,
-          accessory: null,
-        },
+        equipped: { weapon: null, armor: null, offhand: null, accessory: null },
         hotbar: [null, null, null, null, null, null],
         selectedHotbarSlot: 0,
+        gold: 999999,
       };
 
       gameStateRef.current = {
@@ -60,26 +83,22 @@ export default function GameCanvas() {
         damageNumbers: [],
         floatingTexts: [],
         attackArc: null,
-        dialogue: {
-          active: false,
-          npcId: null,
-          currentLine: 0,
-        },
+        dialogue: { active: false, npcId: null, currentLine: 0 },
         transition: null,
         inventoryOpen: false,
         inventoryCursor: 0,
+        shopOpen: false,
         mousePos: { x: 0, y: 0 },
         nearbyNpc: null,
         time: 0,
+        screenFlash: null,
       };
     }
 
-    // Initialize input
     if (!inputRef.current) {
       inputRef.current = new InputState(canvas);
     }
 
-    // Game loop
     const loop = (time: number) => {
       const dt = lastTimeRef.current ? (time - lastTimeRef.current) / 1000 : 0;
       lastTimeRef.current = time;
@@ -88,17 +107,14 @@ export default function GameCanvas() {
       const input = inputRef.current;
       if (!state || !input) return;
 
-      // Sync inventory open state
-      if (state.inventoryOpen !== inventoryOpen) {
-        setInventoryOpen(state.inventoryOpen);
-      }
+      // Sync overlay states
+      if (state.inventoryOpen !== inventoryOpen) setInventoryOpen(state.inventoryOpen);
+      if (state.shopOpen !== shopOpen) setShopOpen(state.shopOpen);
 
       update(state, Math.min(dt, 0.1), input, canvas.width, canvas.height);
 
       const ctx = canvas.getContext('2d');
-      if (ctx) {
-        render(ctx, state, canvas.width, canvas.height);
-      }
+      if (ctx) render(ctx, state, canvas.width, canvas.height);
 
       animationFrameRef.current = requestAnimationFrame(loop);
     };
@@ -109,13 +125,19 @@ export default function GameCanvas() {
       cancelAnimationFrame(animationFrameRef.current);
       window.removeEventListener('resize', resizeCanvas);
     };
-  }, [inventoryOpen]);
+  }, [inventoryOpen, shopOpen]);
 
-  // Inventory overlay handlers
   const handleInventoryClose = () => {
     if (gameStateRef.current) {
       gameStateRef.current.inventoryOpen = false;
       setInventoryOpen(false);
+    }
+  };
+
+  const handleShopClose = () => {
+    if (gameStateRef.current) {
+      gameStateRef.current.shopOpen = false;
+      setShopOpen(false);
     }
   };
 
@@ -147,6 +169,7 @@ export default function GameCanvas() {
             spawnTime: Date.now(),
           });
         }
+        recalculateStats(state.player);
         setForceUpdate((n) => n + 1);
       }
     }
@@ -159,13 +182,19 @@ export default function GameCanvas() {
     }
   };
 
+  const handleBuyItem = (itemId: string): boolean => {
+    if (gameStateRef.current) {
+      const success = buyItem(gameStateRef.current.player, itemId);
+      if (success) setForceUpdate((n) => n + 1);
+      return success;
+    }
+    return false;
+  };
+
   return (
     <>
-      <canvas
-        ref={canvasRef}
-        className="block w-full h-full"
-        style={{ cursor: 'none' }}
-      />
+      <style>{RAINBOW_STYLE}</style>
+      <canvas ref={canvasRef} className="block w-full h-full" style={{ cursor: 'none' }} />
 
       {inventoryOpen && gameStateRef.current && (
         <InventoryOverlay
@@ -177,11 +206,19 @@ export default function GameCanvas() {
           onAddToHotbar={handleAddToHotbar}
         />
       )}
+
+      {shopOpen && gameStateRef.current && (
+        <ShopOverlay
+          player={gameStateRef.current.player}
+          onClose={handleShopClose}
+          onBuy={handleBuyItem}
+        />
+      )}
     </>
   );
 }
 
-// ── COLOUR TOKENS (matches renderer noir palette) ─────────────────────
+// ── COLOUR TOKENS ─────────────────────────────────────────────────────
 const INV_C = {
   bg:        '#080808',
   panel:     '#0d0d0d',
@@ -197,9 +234,28 @@ const INV_C = {
   defColor:  '#77aaff',
   hpColor:   '#77dd77',
   dropRed:   '#cc2936',
+  gold:      '#e0c840',
 };
 
-// Which item types can be equipped into an equipment slot
+// Rarity colors for React UI
+const RARITY_UI_COLORS: Record<Rarity, string> = {
+  common:    '#888888',
+  uncommon:  '#4caf50',
+  rare:      '#2196f3',
+  epic:      '#9c27b0',
+  legendary: '#ff9800',
+  chromatic: '#ffffff', // animated via CSS
+};
+
+const RARITY_LABEL: Record<Rarity, string> = {
+  common:    'COMMON',
+  uncommon:  'UNCOMMON',
+  rare:      'RARE',
+  epic:      'EPIC',
+  legendary: 'LEGENDARY',
+  chromatic: 'CHROMATIC',
+};
+
 const EQUIPPABLE_TYPES = new Set(['weapon', 'armor', 'offhand', 'accessory']);
 
 const EQUIP_SLOTS: { key: keyof EquippedItems; label: string }[] = [
@@ -213,56 +269,67 @@ const TYPE_TAG: Record<string, string> = {
   weapon:    'WPN',
   armor:     'ARM',
   offhand:   'OFF',
-  accessory: 'ACC',
-  consumable:'CSM',
+  perk:      'PRK',
+  consumable:'ITM',
+  active:    'ACT',
   quest:     'QST',
 };
 
-const TYPE_COLOR: Record<string, string> = {
-  weapon:    '#ff9977',
-  armor:     '#77aaff',
-  offhand:   '#aaccff',
-  accessory: '#cc88ff',
-  consumable:'#77dd77',
-  quest:     '#e0c840',
-};
+// Category grouping for inventory display
+type InvCategory = 'weapons' | 'armor' | 'perks' | 'items';
 
-interface InventoryOverlayProps {
-  player: Player;
-  onClose: () => void;
-  onEquip: (itemId: string) => void;
-  onUnequip: (slot: keyof EquippedItems) => void;
-  onDrop: (itemId: string) => void;
-  onAddToHotbar: (itemId: string, slot: number) => void;
+function getCategory(type: string): InvCategory {
+  if (type === 'weapon') return 'weapons';
+  if (type === 'armor' || type === 'offhand') return 'armor';
+  if (type === 'perk' || type === 'accessory') return 'perks';
+  return 'items'; // consumable, active, quest
 }
 
+const CATEGORY_LABELS: Record<InvCategory, string> = {
+  weapons: '⚔  WEAPONS',
+  armor:   '🛡  ARMOR',
+  perks:   '✦  PERKS',
+  items:   '◈  ITEMS',
+};
+
+const CATEGORY_ORDER: InvCategory[] = ['weapons', 'armor', 'perks', 'items'];
+
+// ── PIXEL BOX (React) ─────────────────────────────────────────────────
 function PixelBox({ children, style, className }: {
   children?: React.ReactNode;
   style?: React.CSSProperties;
   className?: string;
 }) {
   return (
-    <div
-      className={className}
-      style={{
-        position: 'relative',
-        background: INV_C.bg,
-        border: `2px solid ${INV_C.border}`,
-        ...style,
-      }}
-    >
-      {/* Corner dots */}
+    <div className={className} style={{ position: 'relative', background: INV_C.bg, border: `2px solid ${INV_C.border}`, ...style }}>
       {[['0','0'],['calc(100% - 3px)','0'],['0','calc(100% - 3px)'],['calc(100% - 3px)','calc(100% - 3px)']].map(([l, t], i) => (
-        <span key={i} style={{
-          position: 'absolute', left: l, top: t,
-          width: 3, height: 3, background: INV_C.border, display: 'block',
-        }} />
+        <span key={i} style={{ position: 'absolute', left: l, top: t, width: 3, height: 3, background: INV_C.border, display: 'block' }} />
       ))}
       {children}
     </div>
   );
 }
 
+// ── RARITY BADGE ──────────────────────────────────────────────────────
+function RarityBadge({ rarity, fontSize = 9 }: { rarity: Rarity; fontSize?: number }) {
+  const isChromatic = rarity === 'chromatic';
+  return (
+    <span
+      className={isChromatic ? 'chromatic-text' : undefined}
+      style={{
+        fontSize,
+        fontFamily: 'monospace',
+        letterSpacing: 1,
+        color: isChromatic ? undefined : RARITY_UI_COLORS[rarity],
+        fontWeight: 'bold',
+      }}
+    >
+      {RARITY_LABEL[rarity]}
+    </span>
+  );
+}
+
+// ── HOTBAR SLOT ───────────────────────────────────────────────────────
 function HotbarSlot({ index, itemId, isSelected, onAssign }: {
   index: number;
   itemId: string | null;
@@ -270,10 +337,12 @@ function HotbarSlot({ index, itemId, isSelected, onAssign }: {
   onAssign: () => void;
 }) {
   const item = itemId ? ITEMS[itemId] : null;
+  const isChromatic = item?.rarity === 'chromatic';
   return (
     <div
       onClick={onAssign}
-      title={item ? `Slot ${index + 1}: ${item.name} — click to assign selected item` : `Slot ${index + 1}: empty`}
+      className={isChromatic ? 'chromatic-border' : undefined}
+      title={item ? `Slot ${index + 1}: ${item.name}` : `Slot ${index + 1}: empty`}
       style={{
         width: 52, height: 52, flexShrink: 0,
         border: `2px solid ${isSelected ? INV_C.selBorder : INV_C.borderMid}`,
@@ -289,7 +358,14 @@ function HotbarSlot({ index, itemId, isSelected, onAssign }: {
         {index + 1}
       </span>
       {item ? (
-        <span style={{ fontSize: 10, color: TYPE_COLOR[item.type] ?? INV_C.silver, fontFamily: 'monospace', textAlign: 'center', padding: '0 4px', lineHeight: 1.2 }}>
+        <span
+          className={isChromatic ? 'chromatic-text' : undefined}
+          style={{
+            fontSize: 9,
+            color: isChromatic ? undefined : RARITY_UI_COLORS[item.rarity as Rarity] ?? INV_C.silver,
+            fontFamily: 'monospace', textAlign: 'center', padding: '0 4px', lineHeight: 1.2,
+          }}
+        >
           {item.name.length > 7 ? item.name.slice(0, 6) + '…' : item.name}
         </span>
       ) : (
@@ -299,38 +375,38 @@ function HotbarSlot({ index, itemId, isSelected, onAssign }: {
   );
 }
 
-// Build the action list for a given item + equipped state
-function getActions(
-  itemId: string,
-  equippedSlot: keyof EquippedItems | null,
-  canEquip: boolean
-): string[] {
-  const actions: string[] = [];
-  if (canEquip) {
-    actions.push(equippedSlot ? 'Unequip' : 'Equip');
-  }
-  actions.push('Drop');
-  actions.push('Cancel');
-  return actions;
+// ── INVENTORY OVERLAY ─────────────────────────────────────────────────
+interface InventoryOverlayProps {
+  player: Player;
+  onClose: () => void;
+  onEquip: (itemId: string) => void;
+  onUnequip: (slot: keyof EquippedItems) => void;
+  onDrop: (itemId: string) => void;
+  onAddToHotbar: (itemId: string, slot: number) => void;
 }
 
-function InventoryOverlay({
-  player,
-  onClose,
-  onEquip,
-  onUnequip,
-  onDrop,
-  onAddToHotbar,
-}: InventoryOverlayProps) {
-  // Browse mode: which item is highlighted
+function InventoryOverlay({ player, onClose, onEquip, onUnequip, onDrop, onAddToHotbar }: InventoryOverlayProps) {
   const [itemCursor, setItemCursor] = useState(0);
-  // Action mode: null = browse, number = action cursor index
   const [actionCursor, setActionCursor] = useState<number | null>(null);
+  const [activeCategory, setActiveCategory] = useState<InvCategory>('weapons');
 
-  const items = player.inventory;
-  const clampedCursor = Math.min(itemCursor, Math.max(0, items.length - 1));
+  // Build flat list of all inventory items grouped by category
+  const categoryItems = (() => {
+    const groups: Record<InvCategory, typeof player.inventory> = {
+      weapons: [], armor: [], perks: [], items: [],
+    };
+    for (const invItem of player.inventory) {
+      const def = ITEMS[invItem.itemId];
+      if (!def) continue;
+      const cat = getCategory(def.type);
+      groups[cat].push(invItem);
+    }
+    return groups;
+  })();
 
-  const selectedInvItem = items[clampedCursor] ?? null;
+  const currentItems = categoryItems[activeCategory];
+  const clampedCursor = Math.min(itemCursor, Math.max(0, currentItems.length - 1));
+  const selectedInvItem = currentItems[clampedCursor] ?? null;
   const selectedItemId = selectedInvItem?.itemId ?? null;
   const selectedItemDef = selectedItemId ? ITEMS[selectedItemId] : null;
 
@@ -338,27 +414,39 @@ function InventoryOverlay({
     ? (Object.entries(player.equipped).find(([, v]) => v === selectedItemId)?.[0] as keyof EquippedItems) ?? null
     : null;
   const canEquip = selectedItemDef ? EQUIPPABLE_TYPES.has(selectedItemDef.type) : false;
-  const actions = selectedItemId ? getActions(selectedItemId, equippedSlot, canEquip) : [];
+  const isPerk = selectedItemDef?.type === 'perk';
+  const isHotbarItem = selectedItemDef?.type === 'consumable' || selectedItemDef?.type === 'active';
+
+  const actions: string[] = [];
+  if (canEquip) actions.push(equippedSlot ? 'Unequip' : 'Equip');
+  actions.push('Drop');
+  actions.push('Cancel');
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
-
-      // Always consume navigation keys so they don't scroll the page or move the player
-      if (['w', 's', ' ', 'arrowup', 'arrowdown'].includes(key)) {
+      if (['w', 's', 'a', 'd', ' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
         e.preventDefault();
       }
 
       if (key === 'escape') {
-        if (actionCursor !== null) {
-          setActionCursor(null); // back to browse
-        } else {
-          onClose();
-        }
+        if (actionCursor !== null) setActionCursor(null);
+        else onClose();
         return;
       }
-      if ((key === 'e') && actionCursor === null) {
-        onClose();
+      if (key === 'e' && actionCursor === null) { onClose(); return; }
+
+      // Tab through categories with left/right or A/D
+      const left  = key === 'a' || key === 'arrowleft';
+      const right = key === 'd' || key === 'arrowright';
+      if (left || right) {
+        const idx = CATEGORY_ORDER.indexOf(activeCategory);
+        const next = left
+          ? (idx - 1 + CATEGORY_ORDER.length) % CATEGORY_ORDER.length
+          : (idx + 1) % CATEGORY_ORDER.length;
+        setActiveCategory(CATEGORY_ORDER[next]);
+        setItemCursor(0);
+        setActionCursor(null);
         return;
       }
 
@@ -366,35 +454,27 @@ function InventoryOverlay({
       const down = key === 's' || key === 'arrowdown';
 
       if (actionCursor !== null) {
-        // ── Action mode ──
         if (up)   setActionCursor(c => Math.max(0, (c ?? 0) - 1));
         if (down) setActionCursor(c => Math.min(actions.length - 1, (c ?? 0) + 1));
         if (key === ' ') {
           const action = actions[actionCursor];
-          if (action === 'Equip' && selectedItemId)   { onEquip(selectedItemId);   setActionCursor(null); }
+          if (action === 'Equip'   && selectedItemId) { onEquip(selectedItemId);   setActionCursor(null); }
           if (action === 'Unequip' && equippedSlot)   { onUnequip(equippedSlot);   setActionCursor(null); }
-          if (action === 'Drop' && selectedItemId)     { onDrop(selectedItemId);    setActionCursor(null); }
-          if (action === 'Cancel')                     { setActionCursor(null); }
+          if (action === 'Drop'    && selectedItemId) { onDrop(selectedItemId);     setActionCursor(null); }
+          if (action === 'Cancel')                    { setActionCursor(null); }
         }
       } else {
-        // ── Browse mode ──
         if (up)   setItemCursor(c => Math.max(0, c - 1));
-        if (down) setItemCursor(c => Math.min(Math.max(0, items.length - 1), c + 1));
-        if (key === ' ' && items.length > 0) {
-          setActionCursor(0); // enter action mode
-        }
+        if (down) setItemCursor(c => Math.min(Math.max(0, currentItems.length - 1), c + 1));
+        if (key === ' ' && currentItems.length > 0) setActionCursor(0);
       }
     };
-
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [actionCursor, clampedCursor, items.length, actions.length, selectedItemId, equippedSlot, onClose, onEquip, onUnequip, onDrop]);
+  }, [actionCursor, clampedCursor, currentItems.length, actions.length, selectedItemId, equippedSlot, activeCategory, onClose, onEquip, onUnequip, onDrop]);
 
-  const handleHotbarAssign = (slot: number) => {
-    if (!selectedItemId) return;
-    onAddToHotbar(selectedItemId, slot);
-  };
+  const isChromatic = selectedItemDef?.rarity === 'chromatic';
 
   return (
     <div style={{
@@ -403,26 +483,48 @@ function InventoryOverlay({
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: '"Space Mono", monospace',
     }}>
-      <PixelBox style={{ width: 740, display: 'flex', flexDirection: 'column', maxHeight: '88vh' }}>
+      <PixelBox style={{ width: 780, display: 'flex', flexDirection: 'column', maxHeight: '88vh' }}>
 
-        {/* ── Header ── */}
-        <div style={{
-          padding: '8px 16px', borderBottom: `1px solid ${INV_C.borderDim}`,
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
+        {/* Header */}
+        <div style={{ padding: '8px 16px', borderBottom: `1px solid ${INV_C.borderDim}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ color: INV_C.white, fontSize: 13, fontWeight: 'bold', letterSpacing: 2 }}>INVENTORY</span>
-          <span style={{ color: INV_C.dim, fontSize: 10 }}>[E / Esc] close</span>
+          <span style={{ color: INV_C.gold, fontSize: 10 }}>◈ {player.gold.toLocaleString()} gold</span>
+          <span style={{ color: INV_C.dim, fontSize: 10 }}>[A/D] category  [W/S] browse  [E/Esc] close</span>
         </div>
 
-        {/* ── Body ── */}
+        {/* Category tabs */}
+        <div style={{ display: 'flex', borderBottom: `1px solid ${INV_C.borderDim}` }}>
+          {CATEGORY_ORDER.map((cat) => {
+            const count = categoryItems[cat].length;
+            const isActive = cat === activeCategory;
+            return (
+              <div
+                key={cat}
+                onClick={() => { setActiveCategory(cat); setItemCursor(0); setActionCursor(null); }}
+                style={{
+                  flex: 1, padding: '6px 12px', cursor: 'pointer', textAlign: 'center',
+                  fontSize: 10, letterSpacing: 1,
+                  color: isActive ? INV_C.white : INV_C.dim,
+                  borderBottom: isActive ? `2px solid ${INV_C.selBorder}` : '2px solid transparent',
+                  background: isActive ? INV_C.selBg : 'transparent',
+                  transition: 'all 0.1s',
+                }}
+              >
+                {CATEGORY_LABELS[cat]} ({count})
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Body */}
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
-          {/* ── Left panel: hotbar + item list ── */}
+          {/* Left panel: hotbar + item list */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '10px 14px', borderRight: `1px solid ${INV_C.borderDim}`, overflow: 'hidden' }}>
 
             {/* Hotbar row */}
             <div style={{ marginBottom: 6 }}>
-              <div style={{ color: INV_C.dim, fontSize: 9, marginBottom: 6, letterSpacing: 2 }}>HOTBAR  —  click a slot to assign selected item</div>
+              <div style={{ color: INV_C.dim, fontSize: 9, marginBottom: 6, letterSpacing: 2 }}>HOTBAR — click slot to assign selected item</div>
               <div style={{ display: 'flex', gap: 4 }}>
                 {[0,1,2,3,4,5].map((i) => (
                   <HotbarSlot
@@ -430,70 +532,97 @@ function InventoryOverlay({
                     index={i}
                     itemId={player.hotbar[i]}
                     isSelected={false}
-                    onAssign={() => handleHotbarAssign(i)}
+                    onAssign={() => { if (selectedItemId && isHotbarItem) onAddToHotbar(selectedItemId, i); }}
                   />
                 ))}
               </div>
+              {isHotbarItem && selectedItemId && (
+                <div style={{ color: INV_C.selBorder, fontSize: 9, marginTop: 4 }}>
+                  ↑ Click a slot to assign {selectedItemDef?.name}
+                </div>
+              )}
             </div>
 
-            {/* Divider */}
-            <div style={{ borderTop: `1px solid ${INV_C.borderDim}`, margin: '8px 0' }} />
+            <div style={{ borderTop: `1px solid ${INV_C.borderDim}`, margin: '6px 0' }} />
 
-            {/* Item list */}
+            {/* Item list for active category */}
             <div style={{ color: INV_C.dim, fontSize: 9, marginBottom: 6, letterSpacing: 2 }}>
-              ALL ITEMS ({player.inventory.length})
+              {CATEGORY_LABELS[activeCategory]} ({currentItems.length})
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
-              {items.length === 0 ? (
-                <div style={{ color: INV_C.dim, fontSize: 11, padding: '12px 0', textAlign: 'center' }}>— empty —</div>
-              ) : items.map((invItem, idx) => {
+              {currentItems.length === 0 ? (
+                <div style={{ color: INV_C.dim, fontSize: 11, padding: '12px 0', textAlign: 'center' }}>— none held —</div>
+              ) : currentItems.map((invItem, idx) => {
                 const itemDef = ITEMS[invItem.itemId];
                 if (!itemDef) return null;
                 const isCursor = idx === clampedCursor;
                 const isEquipped = Object.values(player.equipped).includes(invItem.itemId);
                 const tag = TYPE_TAG[itemDef.type] ?? '???';
-                const tagColor = TYPE_COLOR[itemDef.type] ?? INV_C.silver;
+                const itemChromatic = itemDef.rarity === 'chromatic';
+                const itemRarityColor = RARITY_UI_COLORS[itemDef.rarity as Rarity] ?? INV_C.silver;
 
                 return (
                   <div
                     key={invItem.itemId}
                     onClick={() => { setItemCursor(idx); setActionCursor(null); }}
+                    className={isCursor && itemChromatic ? 'chromatic-border' : undefined}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8,
                       padding: '5px 6px', marginBottom: 2, cursor: 'pointer',
                       background: isCursor ? INV_C.selBg : 'transparent',
-                      border: `1px solid ${isCursor ? INV_C.selBorder : 'transparent'}`,
+                      border: `1px solid ${isCursor && !itemChromatic ? INV_C.selBorder : 'transparent'}`,
                     }}
                   >
                     <span style={{ color: isCursor ? INV_C.selBorder : INV_C.dim, fontSize: 11, width: 10 }}>
                       {isCursor ? '►' : ' '}
                     </span>
-                    <span style={{ color: tagColor, fontSize: 9, width: 28, flexShrink: 0 }}>[{tag}]</span>
-                    <span style={{ color: isCursor ? INV_C.white : INV_C.silver, fontSize: 12, flex: 1 }}>
+                    <span style={{ color: INV_C.dim, fontSize: 9, width: 28, flexShrink: 0 }}>[{tag}]</span>
+                    <span
+                      className={itemChromatic ? 'chromatic-text' : undefined}
+                      style={{
+                        color: itemChromatic ? undefined : (isCursor ? INV_C.white : INV_C.silver),
+                        fontSize: 12, flex: 1,
+                      }}
+                    >
                       {itemDef.name}
                       {isEquipped && <span style={{ color: INV_C.selBorder, fontSize: 9, marginLeft: 6 }}>[E]</span>}
                     </span>
-                    <span style={{ color: INV_C.dim, fontSize: 10, marginRight: 2 }}>×{invItem.quantity}</span>
+                    <span
+                      className={itemChromatic ? 'chromatic-text' : undefined}
+                      style={{ color: itemChromatic ? undefined : itemRarityColor, fontSize: 8, marginRight: 4 }}
+                    >
+                      {RARITY_LABEL[itemDef.rarity as Rarity]}
+                    </span>
+                    <span style={{ color: INV_C.dim, fontSize: 10 }}>×{invItem.quantity}</span>
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* ── Right panel: item detail + actions ── */}
-          <div style={{ width: 228, display: 'flex', flexDirection: 'column', padding: '10px 14px', gap: 0 }}>
+          {/* Right panel: item detail + actions */}
+          <div style={{ width: 240, display: 'flex', flexDirection: 'column', padding: '10px 14px' }}>
 
             {selectedItemDef ? (
               <>
-                <div style={{ color: TYPE_COLOR[selectedItemDef.type] ?? INV_C.silver, fontSize: 9, letterSpacing: 2, marginBottom: 4 }}>
-                  {TYPE_TAG[selectedItemDef.type] ?? '???'}
-                </div>
-                <div style={{ color: INV_C.white, fontSize: 13, fontWeight: 'bold', marginBottom: 2, lineHeight: 1.3 }}>
+                <RarityBadge rarity={selectedItemDef.rarity as Rarity} />
+                <div
+                  className={isChromatic ? 'chromatic-text' : undefined}
+                  style={{
+                    color: isChromatic ? undefined : INV_C.white,
+                    fontSize: 14, fontWeight: 'bold', marginTop: 4, marginBottom: 2, lineHeight: 1.3,
+                  }}
+                >
                   {selectedItemDef.name}
                 </div>
                 {selectedInvItem && selectedInvItem.quantity > 1 && (
                   <div style={{ color: INV_C.dim, fontSize: 10, marginBottom: 4 }}>×{selectedInvItem.quantity}</div>
                 )}
+
+                {/* Description */}
+                <div style={{ color: '#707090', fontSize: 10, lineHeight: 1.5, margin: '6px 0', fontStyle: 'italic' }}>
+                  {selectedItemDef.description}
+                </div>
 
                 {/* Stats */}
                 {(selectedItemDef.damageBonus || selectedItemDef.maxHpBonus || selectedItemDef.healAmount) && (
@@ -501,9 +630,18 @@ function InventoryOverlay({
                     {selectedItemDef.damageBonus && <div style={{ color: INV_C.atkColor, fontSize: 11, marginBottom: 2 }}>ATK  +{selectedItemDef.damageBonus}</div>}
                     {selectedItemDef.maxHpBonus  && <div style={{ color: INV_C.hpColor,  fontSize: 11, marginBottom: 2 }}>HP   +{selectedItemDef.maxHpBonus}</div>}
                     {selectedItemDef.healAmount  && <div style={{ color: INV_C.hpColor,  fontSize: 11 }}>Heals {selectedItemDef.healAmount} HP</div>}
+                    {selectedItemDef.effect === 'providence' && (
+                      <div style={{ color: '#ffe44d', fontSize: 11 }}>40% HP to all nearby enemies</div>
+                    )}
                   </div>
                 )}
 
+                {/* Perk note */}
+                {isPerk && (
+                  <div style={{ color: INV_C.selBorder, fontSize: 9, margin: '4px 0', letterSpacing: 1 }}>
+                    ✦ HELD PASSIVELY — bonuses always active
+                  </div>
+                )}
                 {equippedSlot && (
                   <div style={{ color: INV_C.selBorder, fontSize: 9, margin: '4px 0', letterSpacing: 1 }}>
                     ✦ EQUIPPED ({equippedSlot})
@@ -512,13 +650,8 @@ function InventoryOverlay({
 
                 <div style={{ borderTop: `1px solid ${INV_C.borderDim}`, margin: '8px 0' }} />
 
-                {/* Action list — keyboard cursor + clickable */}
+                {/* Actions */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {!canEquip && (
-                    <div style={{ color: INV_C.dim, fontSize: 10, fontStyle: 'italic', marginBottom: 4 }}>
-                      Runs passively — cannot equip
-                    </div>
-                  )}
                   {actions.map((action, ai) => {
                     const isActionCursor = actionCursor === ai;
                     const isDestructive = action === 'Drop';
@@ -533,22 +666,14 @@ function InventoryOverlay({
                         }}
                         style={{
                           padding: '6px 8px', cursor: 'pointer',
-                          background: isActionCursor
-                            ? (isDestructive ? '#2a0808' : '#0c1c2c')
-                            : 'transparent',
-                          border: `1px solid ${isActionCursor
-                            ? (isDestructive ? '#883333' : INV_C.selBorder)
-                            : INV_C.borderDim}`,
-                          color: isDestructive
-                            ? (isActionCursor ? '#ee6666' : '#663333')
-                            : (isActionCursor ? INV_C.white : INV_C.dim),
+                          background: isActionCursor ? (isDestructive ? '#2a0808' : INV_C.selBg) : 'transparent',
+                          border: `1px solid ${isActionCursor ? (isDestructive ? '#883333' : INV_C.selBorder) : INV_C.borderDim}`,
+                          color: isDestructive ? (isActionCursor ? '#ee6666' : '#663333') : (isActionCursor ? INV_C.white : INV_C.dim),
                           fontSize: 12, fontFamily: 'inherit',
                           display: 'flex', alignItems: 'center', gap: 6,
                         }}
                       >
-                        <span style={{ width: 10, color: INV_C.selBorder }}>
-                          {isActionCursor ? '►' : ' '}
-                        </span>
+                        <span style={{ width: 10, color: INV_C.selBorder }}>{isActionCursor ? '►' : ' '}</span>
                         {action}
                       </div>
                     );
@@ -578,15 +703,202 @@ function InventoryOverlay({
           </div>
         </div>
 
-        {/* ── Footer ── */}
-        <div style={{
-          padding: '6px 16px', borderTop: `1px solid ${INV_C.borderDim}`,
-          display: 'flex', justifyContent: 'center',
-        }}>
+        {/* Footer */}
+        <div style={{ padding: '6px 16px', borderTop: `1px solid ${INV_C.borderDim}`, display: 'flex', justifyContent: 'center' }}>
           <span style={{ color: INV_C.dim, fontSize: 10 }}>
             {actionCursor !== null
               ? '[W/S] choose action   [Space] confirm   [Esc] back'
-              : '[W/S] browse items   [Space] select   [E/Esc] close'}
+              : '[A/D] category   [W/S] browse   [Space] select   [E/Esc] close'}
+          </span>
+        </div>
+      </PixelBox>
+    </div>
+  );
+}
+
+// ── SHOP OVERLAY ──────────────────────────────────────────────────────
+interface ShopOverlayProps {
+  player: Player;
+  onClose: () => void;
+  onBuy: (itemId: string) => boolean;
+}
+
+function ShopOverlay({ player, onClose, onBuy }: ShopOverlayProps) {
+  const allItems = getShopInventory();
+  const [cursor, setCursor] = useState(0);
+  const [message, setMessage] = useState<string | null>(null);
+  const [, forceUpdate] = useState(0);
+
+  const clampedCursor = Math.min(cursor, Math.max(0, allItems.length - 1));
+  const selectedId = allItems[clampedCursor];
+  const selectedDef = selectedId ? ITEMS[selectedId] : null;
+
+  const handleBuy = () => {
+    if (!selectedId) return;
+    const success = onBuy(selectedId);
+    if (success) {
+      setMessage(`Bought ${ITEMS[selectedId]?.name}!`);
+      forceUpdate(n => n + 1);
+    } else {
+      setMessage('Not enough gold.');
+    }
+    setTimeout(() => setMessage(null), 1500);
+  };
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (['w', 's', ' ', 'arrowup', 'arrowdown'].includes(key)) e.preventDefault();
+      if (key === 'escape' || key === 'e') { onClose(); return; }
+      if (key === 'w' || key === 'arrowup')   setCursor(c => Math.max(0, c - 1));
+      if (key === 's' || key === 'arrowdown') setCursor(c => Math.min(allItems.length - 1, c + 1));
+      if (key === ' ' || key === 'enter') handleBuy();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clampedCursor, player.gold]);
+
+  const isChromatic = selectedDef?.rarity === 'chromatic';
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 50,
+      background: 'rgba(0,0,0,0.94)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: '"Space Mono", monospace',
+    }}>
+      <PixelBox style={{ width: 820, display: 'flex', flexDirection: 'column', maxHeight: '88vh' }}>
+
+        {/* Header */}
+        <div style={{ padding: '8px 16px', borderBottom: `1px solid ${INV_C.borderDim}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: INV_C.gold, fontSize: 13, fontWeight: 'bold', letterSpacing: 3 }}>◈ THE MERCHANT</span>
+          <span style={{ color: INV_C.gold, fontSize: 12 }}>◈ {player.gold.toLocaleString()} gold</span>
+          <span style={{ color: INV_C.dim, fontSize: 10 }}>[W/S] browse  [Space] buy  [Esc] close</span>
+        </div>
+
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+          {/* Item list */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 14px', borderRight: `1px solid ${INV_C.borderDim}` }}>
+            {allItems.map((itemId, idx) => {
+              const def = ITEMS[itemId];
+              if (!def) return null;
+              const isCursor = idx === clampedCursor;
+              const itemChromatic = def.rarity === 'chromatic';
+              const canAfford = player.gold >= def.price;
+              const alreadyOwned = player.inventory.some(i => i.itemId === itemId);
+
+              return (
+                <div
+                  key={itemId}
+                  onClick={() => setCursor(idx)}
+                  className={isCursor && itemChromatic ? 'chromatic-border' : undefined}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '5px 8px', marginBottom: 2, cursor: 'pointer',
+                    background: isCursor ? INV_C.selBg : 'transparent',
+                    border: `1px solid ${isCursor && !itemChromatic ? INV_C.selBorder : 'transparent'}`,
+                    opacity: canAfford ? 1 : 0.5,
+                  }}
+                >
+                  <span style={{ color: isCursor ? INV_C.selBorder : INV_C.dim, fontSize: 11, width: 10 }}>
+                    {isCursor ? '►' : ' '}
+                  </span>
+                  <span style={{ color: INV_C.dim, fontSize: 8, width: 28, flexShrink: 0 }}>[{TYPE_TAG[def.type] ?? '???'}]</span>
+                  <span
+                    className={itemChromatic ? 'chromatic-text' : undefined}
+                    style={{ flex: 1, fontSize: 11, color: itemChromatic ? undefined : (isCursor ? INV_C.white : INV_C.silver) }}
+                  >
+                    {def.name}
+                    {alreadyOwned && <span style={{ color: INV_C.dim, fontSize: 8, marginLeft: 6 }}>[owned]</span>}
+                  </span>
+                  <span
+                    className={itemChromatic ? 'chromatic-text' : undefined}
+                    style={{ color: itemChromatic ? undefined : RARITY_UI_COLORS[def.rarity as Rarity], fontSize: 8, width: 70, textAlign: 'right' }}
+                  >
+                    {RARITY_LABEL[def.rarity as Rarity]}
+                  </span>
+                  <span style={{ color: canAfford ? INV_C.gold : '#885500', fontSize: 10, width: 70, textAlign: 'right' }}>
+                    ◈ {def.price.toLocaleString()}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Detail panel */}
+          <div style={{ width: 250, display: 'flex', flexDirection: 'column', padding: '12px 14px', gap: 8 }}>
+            {selectedDef ? (
+              <>
+                <RarityBadge rarity={selectedDef.rarity as Rarity} />
+                <div
+                  className={isChromatic ? 'chromatic-text' : undefined}
+                  style={{ color: isChromatic ? undefined : INV_C.white, fontSize: 15, fontWeight: 'bold', lineHeight: 1.3 }}
+                >
+                  {selectedDef.name}
+                </div>
+
+                <div style={{ color: '#707090', fontSize: 10, lineHeight: 1.6, fontStyle: 'italic' }}>
+                  {selectedDef.description}
+                </div>
+
+                {(selectedDef.damageBonus || selectedDef.maxHpBonus || selectedDef.healAmount || selectedDef.effect) && (
+                  <div style={{ padding: '8px 0', borderTop: `1px solid ${INV_C.borderDim}`, borderBottom: `1px solid ${INV_C.borderDim}` }}>
+                    {selectedDef.damageBonus && <div style={{ color: INV_C.atkColor, fontSize: 11, marginBottom: 2 }}>ATK  +{selectedDef.damageBonus}</div>}
+                    {selectedDef.maxHpBonus  && <div style={{ color: INV_C.hpColor,  fontSize: 11, marginBottom: 2 }}>HP   +{selectedDef.maxHpBonus}</div>}
+                    {selectedDef.healAmount  && <div style={{ color: INV_C.hpColor,  fontSize: 11 }}>Heals {selectedDef.healAmount} HP on use</div>}
+                    {selectedDef.effect === 'providence' && (
+                      <div style={{ color: '#ffe44d', fontSize: 11 }}>Deals 40% max HP to all nearby enemies</div>
+                    )}
+                    {selectedDef.type === 'perk' && (
+                      <div style={{ color: INV_C.selBorder, fontSize: 9, marginTop: 4 }}>✦ Passive — always active when held</div>
+                    )}
+                  </div>
+                )}
+
+                {(selectedDef.id === 'creed' || selectedDef.id === 'chromacy') && (
+                  <div style={{ color: '#aaaaff', fontSize: 9, lineHeight: 1.5, padding: '6px 0', borderTop: `1px solid ${INV_C.borderDim}` }}>
+                    ⟳ OPPOSING PAIR — Hold both Creed &amp; Chromacy for synergy: +15 ATK, +20 HP
+                  </div>
+                )}
+
+                <div style={{ marginTop: 'auto' }}>
+                  {message && (
+                    <div style={{
+                      color: message.includes('Bought') ? '#77dd77' : '#cc2936',
+                      fontSize: 11, textAlign: 'center', marginBottom: 8,
+                    }}>
+                      {message}
+                    </div>
+                  )}
+                  <div
+                    onClick={handleBuy}
+                    style={{
+                      padding: '10px 0',
+                      background: player.gold >= selectedDef.price ? '#0a1a0a' : '#1a0a0a',
+                      border: `1px solid ${player.gold >= selectedDef.price ? '#4a8a4a' : '#8a3a3a'}`,
+                      color: player.gold >= selectedDef.price ? '#77dd77' : '#cc5555',
+                      fontSize: 12, textAlign: 'center', cursor: 'pointer',
+                      letterSpacing: 1,
+                    }}
+                  >
+                    {player.gold >= selectedDef.price
+                      ? `BUY — ◈ ${selectedDef.price.toLocaleString()}`
+                      : `NEED ◈ ${(selectedDef.price - player.gold).toLocaleString()} MORE`}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div style={{ color: INV_C.dim, fontSize: 11 }}>Select an item to inspect</div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '6px 16px', borderTop: `1px solid ${INV_C.borderDim}`, textAlign: 'center' }}>
+          <span style={{ color: INV_C.dim, fontSize: 10 }}>
+            [W/S] browse   [Space / click] buy   [Esc] leave shop
           </span>
         </div>
       </PixelBox>

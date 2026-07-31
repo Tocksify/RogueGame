@@ -1,5 +1,6 @@
 export type HairStyle = 'bald' | 'buzz' | 'short' | 'long' | 'ponytail' | 'spiky' | 'mohawk';
 export type Accessory = 'none' | 'glasses' | 'beard' | 'earrings';
+export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'chromatic';
 
 export interface SpriteAppearance {
   cloth: string;
@@ -22,11 +23,15 @@ export interface Vector2 {
 export interface ItemDef {
   id: string;
   name: string;
-  type: 'weapon' | 'armor' | 'offhand' | 'accessory' | 'consumable' | 'quest';
+  type: 'weapon' | 'armor' | 'offhand' | 'perk' | 'consumable' | 'active' | 'quest';
+  rarity: Rarity;
+  description: string;
+  price: number;
   icon: { shape: string; color: string };
   damageBonus?: number;
   maxHpBonus?: number;
   healAmount?: number;
+  effect?: string; // 'providence' | etc.
 }
 
 export interface InventoryItem {
@@ -62,6 +67,7 @@ export interface Player {
   equipped: EquippedItems;
   hotbar: (string | null)[]; // 6 slots, item IDs
   selectedHotbarSlot: number;
+  gold: number;
 }
 
 export interface Enemy {
@@ -90,6 +96,7 @@ export interface NPC {
   y: number;
   dialogue: string[];
   appearance: SpriteAppearance;
+  isShopkeeper?: boolean;
 }
 
 export interface Doorway {
@@ -147,6 +154,13 @@ export interface RoomTransition {
   entryPoint: Vector2;
 }
 
+export interface ScreenFlash {
+  color: string;
+  alpha: number;
+  startTime: number;
+  duration: number;
+}
+
 export interface GameState {
   player: Player;
   currentRoom: Vector2;
@@ -158,7 +172,9 @@ export interface GameState {
   transition: RoomTransition | null;
   inventoryOpen: boolean;
   inventoryCursor: number;
+  shopOpen: boolean;
   mousePos: Vector2;
   nearbyNpc: string | null;
   time: number;
+  screenFlash: ScreenFlash | null;
 }

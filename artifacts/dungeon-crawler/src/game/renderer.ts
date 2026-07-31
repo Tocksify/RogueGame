@@ -1,6 +1,6 @@
-import { GameState, Doorway } from './types';
+import { GameState, Doorway, Rarity } from './types';
 import { drawSprite, PLAYER_APPEARANCE } from './sprite';
-import { roomKey, ROOM_WIDTH, ROOM_HEIGHT, TILE_SIZE, ITEMS } from './world';
+import { roomKey, ROOM_WIDTH, ROOM_HEIGHT, TILE_SIZE, ITEMS, RARITY_COLORS } from './world';
 
 // ── NOIR 8-BIT PALETTE ──────────────────────────────────────────────
 const C = {
@@ -17,7 +17,7 @@ const C = {
   dim:     '#505050',
 };
 
-// Number of wall tiles thick on each side (1 tile = TILE_SIZE px)
+// Number of wall tiles thick on each side
 const WALL_TILES = 1;
 
 // ── TILE DRAWING ─────────────────────────────────────────────────────
@@ -49,7 +49,6 @@ function drawTile(
 
   ctx.fillStyle = base;
   ctx.fillRect(x, y, TS, TS);
-
   ctx.fillStyle = detail;
 
   if (tile === 'V') {
@@ -78,7 +77,6 @@ function drawTile(
     for (let r = 0; r < 4; r++) {
       ctx.fillRect(x + 2, y + r * 12 + 10, TS - 4, 2);
     }
-    // pseudo-3D edge highlight
     ctx.fillStyle = '#3a3a3a';
     ctx.fillRect(x, y, TS, 2);
     ctx.fillStyle = '#141414';
@@ -89,13 +87,12 @@ function drawTile(
       ctx.fillRect(x + i * 16 + 6, y + (i % 2) * 14 + 8, 3, 3);
     }
   } else if (tile === 'D') {
-    // Door tile: archway shape
     ctx.fillStyle = '#2a2a44';
     ctx.fillRect(x + 6, y + 6, TS - 12, TS - 6);
     ctx.fillStyle = '#111122';
     ctx.fillRect(x + 10, y + 10, TS - 20, TS - 12);
     ctx.fillStyle = '#5555aa';
-    ctx.fillRect(x + TS / 2 - 2, y + TS - 12, 4, 8); // handle
+    ctx.fillRect(x + TS / 2 - 2, y + TS - 12, 4, 8);
   }
 
   if (bright) {
@@ -118,11 +115,7 @@ function drawTile(
 }
 
 // ── SCANLINES ────────────────────────────────────────────────────────
-function drawScanlines(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number
-): void {
+function drawScanlines(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   ctx.fillStyle = 'rgba(0,0,0,0.10)';
   for (let y = 0; y < h; y += 4) {
     ctx.fillRect(0, y, w, 2);
@@ -132,20 +125,14 @@ function drawScanlines(
 // ── PIXEL BOX ────────────────────────────────────────────────────────
 function pixelBox(
   ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  fill = C.black,
-  stroke = C.white,
-  sw = 2
+  x: number, y: number, w: number, h: number,
+  fill = C.black, stroke = C.white, sw = 2
 ): void {
   ctx.fillStyle = fill;
   ctx.fillRect(x, y, w, h);
   ctx.strokeStyle = stroke;
   ctx.lineWidth = sw;
   ctx.strokeRect(x, y, w, h);
-  // Corner dots
   ctx.fillStyle = stroke;
   ctx.fillRect(x, y, 3, 3);
   ctx.fillRect(x + w - 3, y, 3, 3);
@@ -153,15 +140,27 @@ function pixelBox(
   ctx.fillRect(x + w - 3, y + h - 3, 3, 3);
 }
 
+// ── RAINBOW GRADIENT ─────────────────────────────────────────────────
+function getRainbowGradient(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number
+): CanvasGradient {
+  const t = Date.now() / 15;
+  const grad = ctx.createLinearGradient(x, y, x + w, y + h);
+  grad.addColorStop(0,    `hsl(${(t)      % 360}, 100%, 65%)`);
+  grad.addColorStop(0.17, `hsl(${(t + 60) % 360}, 100%, 65%)`);
+  grad.addColorStop(0.33, `hsl(${(t + 120)% 360}, 100%, 65%)`);
+  grad.addColorStop(0.5,  `hsl(${(t + 180)% 360}, 100%, 65%)`);
+  grad.addColorStop(0.67, `hsl(${(t + 240)% 360}, 100%, 65%)`);
+  grad.addColorStop(0.83, `hsl(${(t + 300)% 360}, 100%, 65%)`);
+  grad.addColorStop(1,    `hsl(${(t + 360)% 360}, 100%, 65%)`);
+  return grad;
+}
+
 // ── TILE MAP GENERATION ──────────────────────────────────────────────
-// Room tile grid is TILES_X × TILES_Y.
-// Perimeter = wall ('W'), door gaps = door tile ('D'), interior = floor mix.
 const TILES_X = Math.floor(ROOM_WIDTH / TILE_SIZE);  // 15
 const TILES_Y = Math.floor(ROOM_HEIGHT / TILE_SIZE); // 10
 
-// Door gap: 2 tiles wide, centered
-// North/South: cols 7,8  (center = 7.5 → pixel 240)
-// East/West:   rows 4,5  (center = 4.5 → pixel 128-192, center 160)
 const DOOR_COLS_NS = [7, 8];
 const DOOR_ROWS_EW = [4, 5];
 
@@ -179,30 +178,17 @@ function generateTileMap(doorways: Doorway[]): string[][] {
       const isCorner = (isN || isS) && (isW || isE);
       const isPerimeter = isN || isS || isW || isE;
 
-      // ── Structural corners: solid void blocks ──
-      if (isCorner) {
-        map[ty][tx] = 'V';
-        continue;
-      }
+      if (isCorner) { map[ty][tx] = 'V'; continue; }
 
-      // ── Perimeter: walls or door arches ──
       if (isPerimeter) {
-        if (isN && hasDoor('north') && DOOR_COLS_NS.includes(tx)) {
-          map[ty][tx] = 'D';
-        } else if (isS && hasDoor('south') && DOOR_COLS_NS.includes(tx)) {
-          map[ty][tx] = 'D';
-        } else if (isW && hasDoor('west') && DOOR_ROWS_EW.includes(ty)) {
-          map[ty][tx] = 'D';
-        } else if (isE && hasDoor('east') && DOOR_ROWS_EW.includes(ty)) {
-          map[ty][tx] = 'D';
-        } else {
-          map[ty][tx] = 'W';
-        }
+        if (isN && hasDoor('north') && DOOR_COLS_NS.includes(tx)) map[ty][tx] = 'D';
+        else if (isS && hasDoor('south') && DOOR_COLS_NS.includes(tx)) map[ty][tx] = 'D';
+        else if (isW && hasDoor('west') && DOOR_ROWS_EW.includes(ty)) map[ty][tx] = 'D';
+        else if (isE && hasDoor('east') && DOOR_ROWS_EW.includes(ty)) map[ty][tx] = 'D';
+        else map[ty][tx] = 'W';
         continue;
       }
 
-      // ── Inner ring (1 tile from walls): lantern sconces at interior corners,
-      //    plain stone along the wall strip ──
       const isInnerRing =
         ty === 1 || ty === TILES_Y - 2 || tx === 1 || tx === TILES_X - 2;
       if (isInnerRing) {
@@ -212,12 +198,10 @@ function generateTileMap(doorways: Doorway[]): string[][] {
         continue;
       }
 
-      // ── Main interior: deterministic floor variety ──
-      // P = paving stones, G = gray stone, M = mosaic accent
       const seed = (tx * 7 + ty * 13) % 16;
-      if (seed < 7)       map[ty][tx] = 'G'; // gray stone — most common
-      else if (seed < 12) map[ty][tx] = 'P'; // paving slabs
-      else                map[ty][tx] = 'M'; // mosaic accent
+      if (seed < 7)       map[ty][tx] = 'G';
+      else if (seed < 12) map[ty][tx] = 'P';
+      else                map[ty][tx] = 'M';
     }
   }
 
@@ -236,11 +220,9 @@ export function render(
 ): void {
   ctx.imageSmoothingEnabled = false;
 
-  // Black void
   ctx.fillStyle = C.black;
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-  // Camera: center on player (or slide during transition)
   let camX = state.player.x;
   let camY = state.player.y;
 
@@ -257,7 +239,6 @@ export function render(
   }
 
   ctx.save();
-  // Zoom: scale around screen center, translate so camX/camY appears at screen center
   ctx.translate(canvasWidth / 2, canvasHeight / 2);
   ctx.scale(ZOOM, ZOOM);
   ctx.translate(Math.round(-camX), Math.round(-camY));
@@ -269,13 +250,25 @@ export function render(
 
   ctx.restore();
 
-  // HUD overlaid on top (no camera offset)
+  // HUD overlaid on top
   drawHUD(ctx, state, canvasWidth, canvasHeight);
 
-  // Scanlines over everything
+  // Screen flash (Providence lightning etc.)
+  if (state.screenFlash) {
+    const elapsed = Date.now() - state.screenFlash.startTime;
+    const t = elapsed / state.screenFlash.duration;
+    if (t < 1) {
+      const alpha = state.screenFlash.alpha * (1 - t);
+      ctx.save();
+      ctx.fillStyle = state.screenFlash.color;
+      ctx.globalAlpha = alpha;
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+      ctx.restore();
+    }
+  }
+
   drawScanlines(ctx, canvasWidth, canvasHeight);
 
-  // Dialogue overlay
   if (state.dialogue.active) {
     drawDialogue(ctx, state, canvasWidth, canvasHeight);
   }
@@ -289,34 +282,32 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState): void {
   const frame = state.time ?? 0;
   const tileMap = generateTileMap(room.doorways);
 
-  // Draw all tiles
   for (let ty = 0; ty < TILES_Y; ty++) {
     for (let tx = 0; tx < TILES_X; tx++) {
       drawTile(ctx, tx, ty, tileMap[ty][tx], frame);
     }
   }
 
-  // Lighting: radial gradient from player (torch glow)
   drawLighting(ctx, state);
 
-  // Floor items
   for (const item of room.items) {
     drawFloorItem(ctx, item);
   }
 
-  // NPCs
   for (const npc of room.npcs) {
     drawSprite(ctx, npc.x - 16, npc.y - 32, npc.appearance);
 
     if (state.nearbyNpc === npc.id) {
-      ctx.fillStyle = C.light;
+      ctx.fillStyle = npc.isShopkeeper ? '#e0c840' : C.light;
       ctx.font = '10px "Space Mono", monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('Press F to talk', npc.x, npc.y - 52);
+      ctx.fillText(
+        npc.isShopkeeper ? 'Press F to shop' : 'Press F to talk',
+        npc.x, npc.y - 52
+      );
     }
   }
 
-  // Enemies
   for (const enemy of room.enemies) {
     if (enemy.dead) {
       const fadeProg = Math.min(1, (Date.now() - enemy.deathTime) / 2000);
@@ -336,7 +327,6 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState): void {
 
     drawSprite(ctx, enemy.x - 16, enemy.y - 32, enemy.appearance);
 
-    // Enemy HP bar
     const bw = 30; const bh = 4;
     const bx = Math.round(enemy.x - bw / 2);
     const by = Math.round(enemy.y - 46);
@@ -350,7 +340,6 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState): void {
     ctx.strokeRect(bx, by, bw, bh);
   }
 
-  // Player damage flash
   if (state.player.damageFlashTime > 0) {
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
@@ -361,7 +350,6 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState): void {
 
   drawSprite(ctx, state.player.x - 16, state.player.y - 32, PLAYER_APPEARANCE);
 
-  // Player HP bar (above sprite)
   const pw = 40; const ph = 5;
   const px = Math.round(state.player.x - pw / 2);
   const py = Math.round(state.player.y - 52);
@@ -374,7 +362,6 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState): void {
   ctx.lineWidth = 1;
   ctx.strokeRect(px, py, pw, ph);
 
-  // Attack arc
   if (state.attackArc) {
     const arc = state.attackArc;
     ctx.save();
@@ -388,7 +375,6 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState): void {
     ctx.restore();
   }
 
-  // Damage numbers
   for (const dn of state.damageNumbers) {
     const elapsed = Date.now() - dn.startTime;
     const t = elapsed / dn.duration;
@@ -401,7 +387,6 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState): void {
     ctx.restore();
   }
 
-  // Floating texts (item pickup)
   for (const ft of state.floatingTexts) {
     const elapsed = Date.now() - ft.startTime;
     const t = elapsed / ft.duration;
@@ -417,14 +402,13 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState): void {
 
 // ── LIGHTING ──────────────────────────────────────────────────────────
 function drawLighting(ctx: CanvasRenderingContext2D, state: GameState): void {
-  // Dark overlay with a torch-light cutout from the player
   const grd = ctx.createRadialGradient(
     state.player.x, state.player.y, 0,
     state.player.x, state.player.y, 220
   );
-  grd.addColorStop(0,   'rgba(0,0,0,0)');
+  grd.addColorStop(0,    'rgba(0,0,0,0)');
   grd.addColorStop(0.45, 'rgba(0,0,0,0.18)');
-  grd.addColorStop(1,   'rgba(0,0,0,0.62)');
+  grd.addColorStop(1,    'rgba(0,0,0,0.62)');
 
   ctx.save();
   ctx.fillStyle = grd;
@@ -443,17 +427,24 @@ function drawFloorItem(ctx: CanvasRenderingContext2D, item: any): void {
   const ix = Math.round(cx - iconSize / 2);
   const iy = Math.round(item.y - iconSize - 6);
 
-  // Draw icon normally
   drawItemIcon(ctx, cx, ix, iy, iconSize, itemDef);
 
-  // Draw pulsing outline directly on the same shape
+  // Rarity-colored border
+  const pad = 3;
+  const rarity = itemDef.rarity as Rarity;
   ctx.save();
-  ctx.strokeStyle = `rgba(220,220,220,${0.4 + 0.6 * pulse})`;
-  ctx.lineWidth = 1.5;
-  const pad = 2; // slight outset so border doesn't overlap fill
+  ctx.lineWidth = 2;
+
+  if (rarity === 'chromatic') {
+    ctx.strokeStyle = getRainbowGradient(ctx, ix - pad, iy - pad, iconSize + pad * 2, iconSize + pad * 2);
+  } else {
+    const rarityColor = RARITY_COLORS[rarity] ?? '#888888';
+    ctx.strokeStyle = `rgba(${hexToRgb(rarityColor)},${0.5 + 0.5 * pulse})`;
+  }
 
   switch (itemDef.icon.shape) {
     case 'rect':
+    case 'key':
       ctx.strokeRect(ix - pad, iy - pad, iconSize + pad * 2, iconSize + pad * 2);
       break;
     case 'circle':
@@ -484,12 +475,20 @@ function drawFloorItem(ctx: CanvasRenderingContext2D, item: any): void {
       ctx.stroke();
       break;
     }
-    case 'key':
-      // Outline the key shape with a simple bounding box
-      ctx.strokeRect(ix - pad, iy - pad, iconSize + pad * 2, iconSize + pad * 2);
-      break;
   }
   ctx.restore();
+
+  // Chromatic extra glow ring
+  if (rarity === 'chromatic') {
+    ctx.save();
+    ctx.globalAlpha = 0.25 + 0.15 * pulse;
+    ctx.strokeStyle = getRainbowGradient(ctx, ix - pad - 4, iy - pad - 4, iconSize + (pad + 4) * 2, iconSize + (pad + 4) * 2);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, iy + iconSize / 2, iconSize / 2 + pad + 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
 
   // Ground dot
   ctx.fillStyle = `rgba(192,192,192,${pulse * 0.45})`;
@@ -499,7 +498,7 @@ function drawFloorItem(ctx: CanvasRenderingContext2D, item: any): void {
 }
 
 // ── ITEM ICON (shared by floor + hotbar) ──────────────────────────────
-function drawItemIcon(
+export function drawItemIcon(
   ctx: CanvasRenderingContext2D,
   centerX: number,
   ix: number,
@@ -571,15 +570,15 @@ function drawHUD(
   ctx.font = '12px "Space Mono", monospace';
   ctx.textBaseline = 'alphabetic';
 
-  // ── Top-left: HP box ──
-  const hpBoxW = 148; const hpBoxH = 46;
+  // ── Top-left: HP + Gold box ──
+  const hpBoxW = 162; const hpBoxH = 60;
   pixelBox(ctx, 12, 10, hpBoxW, hpBoxH, C.black, C.mid, 2);
 
   ctx.fillStyle = C.silver;
   ctx.textAlign = 'left';
   ctx.fillText(`HP: ${state.player.hp}/${state.player.maxHp}`, 20, 28);
 
-  const barW = 120; const barH = 10;
+  const barW = 134; const barH = 10;
   const barX = 20; const barY = 33;
   ctx.fillStyle = C.darkest;
   ctx.fillRect(barX, barY, barW, barH);
@@ -590,6 +589,11 @@ function drawHUD(
   ctx.lineWidth = 1;
   ctx.strokeRect(barX, barY, barW, barH);
 
+  // Gold display
+  ctx.fillStyle = '#e0c840';
+  ctx.font = '10px "Space Mono", monospace';
+  ctx.fillText(`◈ ${(state.player.gold ?? 0).toLocaleString()}`, 20, 54);
+
   // ── Top-right: Room info box ──
   const room = state.rooms.get(roomKey(state.currentRoom));
   const enemyCount = room ? room.enemies.filter((e) => !e.dead).length : 0;
@@ -598,10 +602,8 @@ function drawHUD(
 
   ctx.textAlign = 'right';
   ctx.fillStyle = C.silver;
-  ctx.fillText(
-    `Room ${state.currentRoom.x},${state.currentRoom.y}`,
-    cw - 20, 28
-  );
+  ctx.font = '12px "Space Mono", monospace';
+  ctx.fillText(`Room ${state.currentRoom.x},${state.currentRoom.y}`, cw - 20, 28);
   ctx.fillStyle = enemyCount > 0 ? '#cc2936' : C.dim;
   ctx.fillText(`Enemies: ${enemyCount}`, cw - 20, 46);
 
@@ -613,11 +615,11 @@ function drawHUD(
   ctx.fillStyle = C.dim;
   ctx.font = '10px "Space Mono", monospace';
   ctx.fillText('[E] Inventory', cw - 14, ch - 54);
-  ctx.fillText('[F] Talk',      cw - 14, ch - 40);
+  ctx.fillText('[F] Talk/Shop', cw - 14, ch - 40);
   ctx.fillText('[LMB] Attack',  cw - 14, ch - 26);
   ctx.fillText('[Q] Use Item',  cw - 14, ch - 12);
 
-  // ── Mouse crosshair (noir style: small plus) ──
+  // ── Mouse crosshair ──
   const mx = state.mousePos.x;
   const my = state.mousePos.y;
   ctx.strokeStyle = C.silver;
@@ -626,7 +628,6 @@ function drawHUD(
   ctx.moveTo(mx - 7, my); ctx.lineTo(mx + 7, my);
   ctx.moveTo(mx, my - 7); ctx.lineTo(mx, my + 7);
   ctx.stroke();
-  // Center dot
   ctx.fillStyle = C.white;
   ctx.fillRect(mx - 1, my - 1, 2, 2);
 }
@@ -649,12 +650,26 @@ function drawHotbar(
     const sx = startX + i * (slotSize + gap);
     const isSelected = i === state.player.selectedHotbarSlot;
 
-    pixelBox(
-      ctx, sx, startY, slotSize, slotSize,
-      isSelected ? '#1a1a2a' : C.black,
-      isSelected ? C.light : C.mid,
-      isSelected ? 2 : 1
-    );
+    const itemId = state.player.hotbar[i];
+    const itemDef = itemId ? ITEMS[itemId] : null;
+    const rarity = itemDef?.rarity as Rarity | undefined;
+
+    // Slot background
+    ctx.fillStyle = isSelected ? '#1a1a2a' : C.black;
+    ctx.fillRect(sx, startY, slotSize, slotSize);
+
+    // Slot border — rarity-colored for chromatic items, normal otherwise
+    if (itemDef && rarity === 'chromatic') {
+      ctx.save();
+      ctx.strokeStyle = getRainbowGradient(ctx, sx, startY, slotSize, slotSize);
+      ctx.lineWidth = isSelected ? 2 : 1.5;
+      ctx.strokeRect(sx, startY, slotSize, slotSize);
+      ctx.restore();
+    } else {
+      ctx.strokeStyle = isSelected ? C.light : C.mid;
+      ctx.lineWidth = isSelected ? 2 : 1;
+      ctx.strokeRect(sx, startY, slotSize, slotSize);
+    }
 
     // Slot number
     ctx.fillStyle = C.dim;
@@ -663,15 +678,11 @@ function drawHotbar(
     ctx.fillText((i + 1).toString(), sx + 4, startY + 12);
 
     // Item icon
-    const itemId = state.player.hotbar[i];
-    if (itemId) {
-      const itemDef = ITEMS[itemId];
-      if (itemDef) {
-        const is = 22;
-        const ix = sx + slotSize / 2 - is / 2;
-        const iy = startY + slotSize / 2 - is / 2 + 3;
-        drawItemIcon(ctx, sx + slotSize / 2, ix, iy, is, itemDef);
-      }
+    if (itemDef) {
+      const is = 22;
+      const ix = sx + slotSize / 2 - is / 2;
+      const iy = startY + slotSize / 2 - is / 2 + 3;
+      drawItemIcon(ctx, sx + slotSize / 2, ix, iy, is, itemDef);
     }
   }
 
@@ -710,7 +721,6 @@ function drawDialogue(
 
   pixelBox(ctx, panelX, panelY, panelW, panelH, 'rgba(8,8,8,0.92)', C.silver, 2);
 
-  // NPC name header bar
   ctx.fillStyle = C.mid;
   ctx.fillRect(panelX + 2, panelY + 2, panelW - 4, 22);
   ctx.fillStyle = C.white;
@@ -718,13 +728,11 @@ function drawDialogue(
   ctx.textAlign = 'left';
   ctx.fillText(npc.name, panelX + 14, panelY + 17);
 
-  // Dialogue line
   const line = npc.dialogue[state.dialogue.currentLine] ?? '';
   ctx.fillStyle = C.accent;
   ctx.font = '11px "Space Mono", monospace';
   wrapText(ctx, line, panelX + 14, panelY + 50, panelW - 28, 17);
 
-  // Hint
   ctx.fillStyle = C.gray;
   ctx.font = '10px "Space Mono", monospace';
   ctx.textAlign = 'right';
@@ -759,4 +767,10 @@ function wrapText(
     }
   }
   if (line.trim()) ctx.fillText(line.trim(), x, cy);
+}
+
+function hexToRgb(hex: string): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return '192,192,192';
+  return `${parseInt(result[1], 16)},${parseInt(result[2], 16)},${parseInt(result[3], 16)}`;
 }

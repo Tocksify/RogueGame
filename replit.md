@@ -1,6 +1,6 @@
-# [Project name]
+# Dungeon Crawler
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A top-down tile-based dungeon crawler game with a React canvas frontend and an Express API backend.
 
 ## Run & Operate
 
@@ -30,7 +30,16 @@ _Populate as you build — non-obvious choices a reader couldn't infer from the 
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+A top-down dungeon crawler with:
+- WASD movement, left-click melee combat with attack arc
+- Full rarity system: Common → Uncommon → Rare → Epic → Legendary → **Chromatic** (animated rainbow)
+- 29 items across weapons, armor, perks (passive), and active/consumable hotbar items
+- Shop merchant in the starter room — sells every item in the game, priced by rarity
+- 999,999 starting gold for testing (all items purchasable)
+- Categorized inventory (Weapons / Armor / Perks / Items) with hotbar assignment
+- Providence: legendary active item — lightning bolt deals 40% max HP to all nearby enemies
+- Creed + Chromacy: opposing Chromatic perks — held together grant synergy bonuses (+15 ATK, +20 HP)
+- Floor item drops glow with their rarity color; Chromatic items animate with a rainbow gradient
 
 ## User preferences
 

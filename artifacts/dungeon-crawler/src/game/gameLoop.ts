@@ -14,6 +14,7 @@ import {
   useConsumable,
   getAttackDamage,
   recalculateStats,
+  removeItem,
 } from './inventory';
 
 const PLAYER_HITBOX_RADIUS = 12;
@@ -21,8 +22,9 @@ const ENEMY_HITBOX_RADIUS = 14;
 const NPC_HITBOX_RADIUS = 14;
 const ITEM_PICKUP_RADIUS = 16;
 const ATTACK_RANGE = 60;
-const ATTACK_ARC_ANGLE = Math.PI / 2; // 90 degrees
+const ATTACK_ARC_ANGLE = Math.PI / 2;
 const DOORWAY_WIDTH = 64;
+const PROVIDENCE_RADIUS = 220;
 
 function distance(a: Vector2, b: Vector2): number {
   const dx = a.x - b.x;
@@ -48,11 +50,18 @@ export function update(
   state.time += dt;
   state.mousePos = { ...input.mousePos };
 
+  // Expire screen flash
+  if (
+    state.screenFlash &&
+    Date.now() - state.screenFlash.startTime >= state.screenFlash.duration
+  ) {
+    state.screenFlash = null;
+  }
+
   // If in transition, don't update game state
   if (state.transition && state.transition.active) {
     const elapsed = Date.now() - state.transition.startTime;
     if (elapsed >= state.transition.duration) {
-      // Transition complete
       state.currentRoom = state.transition.toRoom;
       state.player.x = state.transition.entryPoint.x;
       state.player.y = state.transition.entryPoint.y;
@@ -70,7 +79,6 @@ export function update(
       if (npc) {
         if (state.dialogue.currentLine < npc.dialogue.length - 1) {
           state.dialogue.currentLine++;
-          // Consume key to prevent immediate advance
           input.keys.delete(' ');
           input.keys.delete('enter');
         } else {
@@ -91,6 +99,11 @@ export function update(
     return;
   }
 
+  // Shop pause
+  if (state.shopOpen) {
+    return;
+  }
+
   // Inventory input
   if (input.isKeyDown('e')) {
     state.inventoryOpen = !state.inventoryOpen;
@@ -98,11 +111,10 @@ export function update(
   }
 
   if (state.inventoryOpen) {
-    // Inventory is handled by React overlay
     return;
   }
 
-  // Hotbar selection
+  // Hotbar selection (1-6)
   for (let i = 1; i <= 6; i++) {
     if (input.isKeyDown(i.toString())) {
       state.player.selectedHotbarSlot = i - 1;
@@ -110,23 +122,30 @@ export function update(
     }
   }
 
-  // Use hotbar item (right-click or Q)
+  // Use hotbar item (Q)
   if (input.isKeyDown('q')) {
     const itemId = state.player.hotbar[state.player.selectedHotbarSlot];
     if (itemId) {
       const item = ITEMS[itemId];
-      if (item?.type === 'consumable') {
+      const room = getCurrentRoom(state);
+
+      if (item?.type === 'consumable' && item.healAmount) {
         if (useConsumable(state.player, itemId)) {
-          addFloatingText(
-            state,
-            `Used ${item.name}`,
-            state.player.x,
-            state.player.y - 20
-          );
-          // Remove from hotbar if consumed
-          const invItem = state.player.inventory.find(
-            (i) => i.itemId === itemId
-          );
+          addFloatingText(state, `Used ${item.name}`, state.player.x, state.player.y - 20);
+          // Remove from hotbar if depleted
+          const invItem = state.player.inventory.find((i) => i.itemId === itemId);
+          if (!invItem || invItem.quantity === 0) {
+            state.player.hotbar[state.player.selectedHotbarSlot] = null;
+          }
+        }
+      } else if (item?.type === 'active') {
+        // Special active item effects
+        if (item.effect === 'providence' && room) {
+          triggerProvidence(state, room);
+          removeItem(state.player, itemId, 1);
+          addFloatingText(state, 'Providence!', state.player.x, state.player.y - 30);
+          // Remove from hotbar if depleted
+          const invItem = state.player.inventory.find((i) => i.itemId === itemId);
           if (!invItem || invItem.quantity === 0) {
             state.player.hotbar[state.player.selectedHotbarSlot] = null;
           }
@@ -154,15 +173,13 @@ export function update(
     const newX = state.player.x + moveDir.x * state.player.speed * dt;
     const newY = state.player.y + moveDir.y * state.player.speed * dt;
 
-    // Check wall collision
-    const wallPadding = PLAYER_HITBOX_RADIUS + 16; // room wall thickness
+    const wallPadding = PLAYER_HITBOX_RADIUS + 16;
     const canMove =
       newX >= wallPadding &&
       newX <= ROOM_WIDTH - wallPadding &&
       newY >= wallPadding &&
       newY <= ROOM_HEIGHT - wallPadding;
 
-    // Check enemy collision
     let enemyCollision = false;
     for (const enemy of room.enemies) {
       if (enemy.dead) continue;
@@ -173,7 +190,6 @@ export function update(
       }
     }
 
-    // Check NPC collision
     let npcCollision = false;
     for (const npc of room.npcs) {
       const dist = distance({ x: newX, y: newY }, npc);
@@ -213,9 +229,14 @@ export function update(
     if (dist < 40) {
       state.nearbyNpc = npc.id;
       if (input.isKeyDown('f')) {
-        state.dialogue.active = true;
-        state.dialogue.npcId = npc.id;
-        state.dialogue.currentLine = 0;
+        if (npc.isShopkeeper) {
+          // Open the shop overlay (React handles the display)
+          state.shopOpen = true;
+        } else {
+          state.dialogue.active = true;
+          state.dialogue.npcId = npc.id;
+          state.dialogue.currentLine = 0;
+        }
         input.keys.delete('f');
       }
       break;
@@ -229,15 +250,8 @@ export function update(
     if (dist < ITEM_PICKUP_RADIUS) {
       addItem(state.player, item.itemId, 1);
       const itemDef = ITEMS[item.itemId];
-      addFloatingText(
-        state,
-        `+${itemDef.name}`,
-        item.x,
-        item.y - 10
-      );
+      addFloatingText(state, `+${itemDef?.name ?? item.itemId}`, item.x, item.y - 10);
       room.items.splice(i, 1);
-
-      // Recalc stats in case it was armor
       recalculateStats(state.player);
     }
   }
@@ -248,20 +262,13 @@ export function update(
 
     const distToPlayer = distance(enemy, state.player);
 
-    // Aggro check
-    if (distToPlayer < 180) {
-      enemy.aggro = true;
-    }
+    if (distToPlayer < 180) enemy.aggro = true;
 
     if (enemy.aggro) {
-      // Move toward player
       const ang = angle(enemy, state.player);
-      const moveX = Math.cos(ang) * enemy.speed * dt;
-      const moveY = Math.sin(ang) * enemy.speed * dt;
-      enemy.x += moveX;
-      enemy.y += moveY;
+      enemy.x += Math.cos(ang) * enemy.speed * dt;
+      enemy.y += Math.sin(ang) * enemy.speed * dt;
 
-      // Attack player if in range
       if (distToPlayer < 28) {
         const now = Date.now();
         if (now - enemy.lastAttackTime >= enemy.attackCooldown) {
@@ -270,12 +277,10 @@ export function update(
         }
       }
     } else {
-      // Patrol
       const now = Date.now();
       if (now < enemy.waypointPauseUntil) {
-        // Paused
+        // paused
       } else if (!enemy.waypoint) {
-        // Pick new waypoint
         enemy.waypoint = {
           x: 50 + Math.random() * (ROOM_WIDTH - 100),
           y: 50 + Math.random() * (ROOM_HEIGHT - 100),
@@ -295,13 +300,9 @@ export function update(
   }
 
   // Fade damage flash
-  if (state.player.damageFlashTime > 0) {
-    state.player.damageFlashTime -= dt;
-  }
+  if (state.player.damageFlashTime > 0) state.player.damageFlashTime -= dt;
   for (const enemy of room.enemies) {
-    if (enemy.damageFlashTime > 0) {
-      enemy.damageFlashTime -= dt;
-    }
+    if (enemy.damageFlashTime > 0) enemy.damageFlashTime -= dt;
   }
 
   // Remove old damage numbers
@@ -314,11 +315,8 @@ export function update(
     (ft) => Date.now() - ft.startTime < ft.duration
   );
 
-  // Clear attack arc if expired
-  if (
-    state.attackArc &&
-    Date.now() - state.attackArc.startTime >= state.attackArc.duration
-  ) {
+  // Clear attack arc
+  if (state.attackArc && Date.now() - state.attackArc.startTime >= state.attackArc.duration) {
     state.attackArc = null;
   }
 
@@ -343,7 +341,6 @@ function performPlayerAttack(
   const room = getCurrentRoom(state);
   if (!room) return;
 
-  // Calculate attack direction from player to mouse
   const playerScreenX = canvasWidth / 2;
   const playerScreenY = canvasHeight / 2;
   const attackAngle = Math.atan2(
@@ -351,7 +348,6 @@ function performPlayerAttack(
     state.mousePos.x - playerScreenX
   );
 
-  // Create attack arc visual
   state.attackArc = {
     x: state.player.x,
     y: state.player.y,
@@ -362,10 +358,8 @@ function performPlayerAttack(
 
   const damage = getAttackDamage(state.player);
 
-  // Check which enemies are hit
   for (const enemy of room.enemies) {
     if (enemy.dead) continue;
-
     const dist = distance(state.player, enemy);
     if (dist > ATTACK_RANGE) continue;
 
@@ -374,7 +368,6 @@ function performPlayerAttack(
     if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
 
     if (angleDiff <= ATTACK_ARC_ANGLE / 2) {
-      // Hit!
       enemy.hp -= damage;
       enemy.damageFlashTime = 0.15;
       addDamageNumber(state, damage, '#ffffff', enemy.x, enemy.y - 20);
@@ -382,7 +375,36 @@ function performPlayerAttack(
       if (enemy.hp <= 0) {
         enemy.dead = true;
         enemy.deathTime = Date.now();
-        // Drop item
+        const room2 = getCurrentRoom(state);
+        if (room2) {
+          room2.items.push({
+            id: `drop-${Date.now()}-${Math.random()}`,
+            itemId: enemy.dropItemId,
+            x: enemy.x,
+            y: enemy.y,
+            spawnTime: Date.now(),
+          });
+        }
+      }
+    }
+  }
+}
+
+function triggerProvidence(state: GameState, room: typeof state.rooms extends Map<string, infer R> ? R : never): void {
+  let hitCount = 0;
+  for (const enemy of room.enemies) {
+    if (enemy.dead) continue;
+    const dist = distance(state.player, enemy);
+    if (dist <= PROVIDENCE_RADIUS) {
+      const dmg = Math.max(1, Math.round(enemy.maxHp * 0.4));
+      enemy.hp -= dmg;
+      enemy.damageFlashTime = 0.4;
+      addDamageNumber(state, dmg, '#ffe44d', enemy.x, enemy.y - 20);
+      hitCount++;
+
+      if (enemy.hp <= 0) {
+        enemy.dead = true;
+        enemy.deathTime = Date.now();
         room.items.push({
           id: `drop-${Date.now()}-${Math.random()}`,
           itemId: enemy.dropItemId,
@@ -393,23 +415,21 @@ function performPlayerAttack(
       }
     }
   }
+
+  // Lightning flash
+  state.screenFlash = {
+    color: '#ffffcc',
+    alpha: 0.75,
+    startTime: Date.now(),
+    duration: 450,
+  };
 }
 
 function damagePlayer(state: GameState, damage: number): void {
   state.player.hp -= damage;
   state.player.damageFlashTime = 0.2;
-  addDamageNumber(
-    state,
-    damage,
-    '#cc2936',
-    state.player.x,
-    state.player.y - 20
-  );
-
-  if (state.player.hp <= 0) {
-    state.player.hp = 0;
-    // Game over (could add a screen here)
-  }
+  addDamageNumber(state, damage, '#cc2936', state.player.x, state.player.y - 20);
+  if (state.player.hp <= 0) state.player.hp = 0;
 }
 
 function addDamageNumber(
@@ -421,26 +441,16 @@ function addDamageNumber(
 ): void {
   state.damageNumbers.push({
     id: `dmg-${Date.now()}-${Math.random()}`,
-    x,
-    y,
-    value,
-    color,
+    x, y, value, color,
     startTime: Date.now(),
     duration: 1000,
   });
 }
 
-function addFloatingText(
-  state: GameState,
-  text: string,
-  x: number,
-  y: number
-): void {
+function addFloatingText(state: GameState, text: string, x: number, y: number): void {
   state.floatingTexts.push({
     id: `txt-${Date.now()}-${Math.random()}`,
-    text,
-    x,
-    y,
+    text, x, y,
     startTime: Date.now(),
     duration: 1500,
   });
@@ -449,32 +459,15 @@ function addFloatingText(
 function isPlayerAtDoorway(player: Vector2, doorway: Doorway): boolean {
   const padding = 16;
   const doorCenter = DOORWAY_WIDTH / 2;
-
   switch (doorway.side) {
     case 'north':
-      return (
-        player.y < padding + 10 &&
-        player.x > ROOM_WIDTH / 2 - doorCenter &&
-        player.x < ROOM_WIDTH / 2 + doorCenter
-      );
+      return player.y < padding + 10 && player.x > ROOM_WIDTH / 2 - doorCenter && player.x < ROOM_WIDTH / 2 + doorCenter;
     case 'south':
-      return (
-        player.y > ROOM_HEIGHT - padding - 10 &&
-        player.x > ROOM_WIDTH / 2 - doorCenter &&
-        player.x < ROOM_WIDTH / 2 + doorCenter
-      );
+      return player.y > ROOM_HEIGHT - padding - 10 && player.x > ROOM_WIDTH / 2 - doorCenter && player.x < ROOM_WIDTH / 2 + doorCenter;
     case 'east':
-      return (
-        player.x > ROOM_WIDTH - padding - 10 &&
-        player.y > ROOM_HEIGHT / 2 - doorCenter &&
-        player.y < ROOM_HEIGHT / 2 + doorCenter
-      );
+      return player.x > ROOM_WIDTH - padding - 10 && player.y > ROOM_HEIGHT / 2 - doorCenter && player.y < ROOM_HEIGHT / 2 + doorCenter;
     case 'west':
-      return (
-        player.x < padding + 10 &&
-        player.y > ROOM_HEIGHT / 2 - doorCenter &&
-        player.y < ROOM_HEIGHT / 2 + doorCenter
-      );
+      return player.x < padding + 10 && player.y > ROOM_HEIGHT / 2 - doorCenter && player.y < ROOM_HEIGHT / 2 + doorCenter;
   }
 }
 
@@ -482,24 +475,15 @@ function startRoomTransition(state: GameState, doorway: Doorway): void {
   const toRoomKey = roomKey(doorway.toRoom);
   if (!state.rooms.has(toRoomKey)) return;
 
-  // Calculate entry point in new room
   let entryX = ROOM_WIDTH / 2;
   let entryY = ROOM_HEIGHT / 2;
   const padding = 40;
 
   switch (doorway.side) {
-    case 'north':
-      entryY = ROOM_HEIGHT - padding;
-      break;
-    case 'south':
-      entryY = padding;
-      break;
-    case 'east':
-      entryX = padding;
-      break;
-    case 'west':
-      entryX = ROOM_WIDTH - padding;
-      break;
+    case 'north': entryY = ROOM_HEIGHT - padding; break;
+    case 'south': entryY = padding; break;
+    case 'east':  entryX = padding; break;
+    case 'west':  entryX = ROOM_WIDTH - padding; break;
   }
 
   state.transition = {
