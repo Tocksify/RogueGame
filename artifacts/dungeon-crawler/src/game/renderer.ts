@@ -590,17 +590,7 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
     state.time,
   );
 
-  // Player HP bar (in-world)
-  const pw = 40, ph = 5;
-  const ppx = Math.round(state.player.x - pw / 2);
-  const ppy = Math.round(state.player.y - 52);
-  ctx.fillStyle = C.darkest;
-  ctx.fillRect(ppx, ppy, pw, ph);
-  ctx.fillStyle = '#cc2936';
-  ctx.fillRect(ppx, ppy, Math.round(pw * (state.player.hp / state.player.maxHp)), ph);
-  ctx.strokeStyle = C.mid;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(ppx, ppy, pw, ph);
+  // Player HP bar removed — shown in the HUD (top-left corner)
 
   // Attack arc
   if (state.attackArc) {
