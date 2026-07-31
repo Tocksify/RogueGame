@@ -1,6 +1,20 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { InputState } from '../game/input';
 
+// Returns true only on touch/coarse-pointer devices (phones, tablets)
+function useIsTouchDevice(): boolean {
+  const [isTouch, setIsTouch] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(pointer: coarse)');
+    const handler = (e: MediaQueryListEvent) => setIsTouch(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return isTouch;
+}
+
 interface MobileControlsProps {
   inputRef: React.MutableRefObject<InputState | null>;
   inventoryOpen: boolean;
@@ -60,6 +74,8 @@ export default function MobileControls({
   onToggleInventory,
   onCloseInventory,
 }: MobileControlsProps) {
+  const isTouch = useIsTouchDevice();
+  if (!isTouch) return null;
   const joystickRef = useRef<HTMLDivElement>(null);
   const activeTouchId = useRef<number | null>(null);
   const baseCenter = useRef({ x: 0, y: 0 });
@@ -94,19 +110,21 @@ export default function MobileControls({
       return;
     }
 
-    // Map angle to 8-directional WASD
+    // Map angle to 8-directional WASD.
+    // atan2(ny, nx): 0° = right, 90° = down (screen Y+ is down), 180° = left, 270° = up
     const angle = Math.atan2(ny, nx);
     const deg = ((angle * 180) / Math.PI + 360) % 360;
 
-    const up    = deg >= 292.5 || deg <= 67.5;
-    const right = deg >= 22.5  && deg <= 157.5;
-    const down  = deg >= 112.5 && deg <= 247.5;
-    const left  = deg >= 202.5 && deg <= 337.5;
+    // Each key is active within ±67.5° of its cardinal direction (covers diagonals)
+    const goRight = deg >= 292.5 || deg <= 67.5;   // 0°  centre
+    const goDown  = deg >= 22.5  && deg <= 157.5;  // 90° centre
+    const goLeft  = deg >= 112.5 && deg <= 247.5;  // 180° centre
+    const goUp    = deg >= 202.5 && deg <= 337.5;  // 270° centre
 
-    up    ? input.pressVirtualKey('w') : input.releaseVirtualKey('w');
-    down  ? input.pressVirtualKey('s') : input.releaseVirtualKey('s');
-    left  ? input.pressVirtualKey('a') : input.releaseVirtualKey('a');
-    right ? input.pressVirtualKey('d') : input.releaseVirtualKey('d');
+    goUp    ? input.pressVirtualKey('w') : input.releaseVirtualKey('w');
+    goDown  ? input.pressVirtualKey('s') : input.releaseVirtualKey('s');
+    goLeft  ? input.pressVirtualKey('a') : input.releaseVirtualKey('a');
+    goRight ? input.pressVirtualKey('d') : input.releaseVirtualKey('d');
   }, [inputRef]);
 
   // ── Touch handlers for joystick ───────────────────────────────────────
