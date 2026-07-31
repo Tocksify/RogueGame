@@ -48,8 +48,8 @@ import {
   sfxRoomEnterHallway,
 } from './audio';
 
-const PLAYER_HITBOX_RADIUS = 12;
-const ENEMY_HITBOX_RADIUS = 14;
+const PLAYER_HITBOX_RADIUS = 20;
+const ENEMY_HITBOX_RADIUS = 20;
 const NPC_HITBOX_RADIUS = 14;
 const ITEM_PICKUP_RADIUS = 16;
 const ATTACK_RANGE = 60;
@@ -355,8 +355,11 @@ export function update(
   for (const enemy of room.enemies) {
     if (enemy.dead) continue;
     const distToPlayer = distance(enemy, state.player);
-    if (distToPlayer < 180 && !enemy.aggro) sfxEnemyAlert();
-    if (distToPlayer < 180) enemy.aggro = true;
+    // Enemies only aggro after the player lands a hit on them
+    if (enemy.hasBeenHit && !enemy.aggro) {
+      sfxEnemyAlert();
+      enemy.aggro = true;
+    }
 
     if (enemy.aggro) {
       const ang = angle(enemy, state.player);
@@ -519,6 +522,7 @@ function performPlayerAttack(state: GameState, canvasWidth: number, canvasHeight
 
     if (angleDiff <= ATTACK_ARC_ANGLE / 2) {
       hitAny = true;
+      enemy.hasBeenHit = true;
       enemy.hp -= damage;
       enemy.damageFlashTime = 0.15;
       addDamageNumber(state, damage, '#ffffff', enemy.x, enemy.y - 20);

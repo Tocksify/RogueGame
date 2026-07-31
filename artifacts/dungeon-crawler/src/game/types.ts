@@ -113,6 +113,8 @@ export interface Enemy {
   exploded?: boolean;
   // Sprite-sheet override — when set, renderer uses real artwork instead of procedural sprite
   spriteType?: 'bat' | 'skeleton';
+  // Aggro-on-hit: enemy only chases/attacks after the player has landed a hit on it
+  hasBeenHit?: boolean;
 }
 
 export interface NPC {
