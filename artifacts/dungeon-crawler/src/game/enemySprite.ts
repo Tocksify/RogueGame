@@ -1,34 +1,52 @@
 /**
  * Enemy sprite renderer — bat and skeleton sprite sheet animations.
  *
- * Bat (bat-idle.png):  576×64 → 9 frames × 64×64, single row (IdleFly)
- * Skeleton (skeleton.png): 832×320 → 13 frames × 64×64, 5 rows
- *   Row 0: walk, Row 1: attack, Row 2: hurt, Row 3: die, Row 4: idle
+ * All enemies are drawn at ENEMY_DRAW_SIZE × ENEMY_DRAW_SIZE world pixels
+ * (matching the player sprite), centred horizontally and bottom-anchored
+ * at (cx, cy) — identical anchor convention to the player.
+ *
+ * Bat sheets (all 64×64 frames, single row):
+ *   bat-idle.png   576 × 64  →  9 frames  (IdleFly)
+ *   bat-run.png    512 × 64  →  8 frames  (Run / chase)
+ *   bat-attack.png 512 × 64  →  8 frames  (Attack1)
+ *   bat-hurt.png   320 × 64  →  5 frames  (Hurt)
+ *
+ * Skeleton sheet (skeleton.png):  832×320 → 13 frames × 64×64, 5 rows
+ *   Row 0: walk  | Row 1: attack | Row 2: hurt | Row 3: die | Row 4: idle
  */
+
+export const ENEMY_DRAW_SIZE = 84; // matches DRAW_SIZE in playerSprite.ts
 
 // ── Bat ──────────────────────────────────────────────────────────────────────
 const BAT_FRAME_W = 64;
 const BAT_FRAME_H = 64;
-const BAT_FRAMES  = 9;   // 576 / 64
 const BAT_FPS     = 10;
-const BAT_DRAW_W  = 48;
-const BAT_DRAW_H  = 48;
+
+const BAT_ANIM = {
+  idle:   { frames: 9,  fps: 8  },
+  run:    { frames: 8,  fps: 12 },
+  attack: { frames: 8,  fps: 14 },
+  hurt:   { frames: 5,  fps: 12 },
+} as const;
+type BatAnim = keyof typeof BAT_ANIM;
 
 // ── Skeleton ─────────────────────────────────────────────────────────────────
 const SKEL_FRAME_W = 64;
 const SKEL_FRAME_H = 64;
-const SKEL_COLS    = 13;  // 832 / 64
+const SKEL_COLS    = 13;
 const SKEL_FPS     = 9;
-const SKEL_DRAW_W  = 72;  // draw a bit larger for boss feel
-const SKEL_DRAW_H  = 72;
 
 export const SKEL_ROW_WALK   = 0;
 export const SKEL_ROW_ATTACK = 1;
 export const SKEL_ROW_HURT   = 2;
 export const SKEL_ROW_DIE    = 3;
+export const SKEL_ROW_IDLE   = 4;
 
-// ── Shared loader ────────────────────────────────────────────────────────────
-let batSheet:  HTMLImageElement | null = null;
+// ── Sprite sheets ─────────────────────────────────────────────────────────────
+let batIdle:   HTMLImageElement | null = null;
+let batRun:    HTMLImageElement | null = null;
+let batAttack: HTMLImageElement | null = null;
+let batHurt:   HTMLImageElement | null = null;
 let skelSheet: HTMLImageElement | null = null;
 let _loaded = false;
 
@@ -43,8 +61,11 @@ function loadImg(src: string): Promise<HTMLImageElement> {
 
 export async function loadEnemySprites(base: string = ''): Promise<void> {
   if (_loaded) return;
-  [batSheet, skelSheet] = await Promise.all([
+  [batIdle, batRun, batAttack, batHurt, skelSheet] = await Promise.all([
     loadImg(`${base}sprites/bat-idle.png`),
+    loadImg(`${base}sprites/bat-run.png`),
+    loadImg(`${base}sprites/bat-attack.png`),
+    loadImg(`${base}sprites/bat-hurt.png`),
     loadImg(`${base}sprites/skeleton.png`),
   ]);
   _loaded = true;
@@ -52,7 +73,8 @@ export async function loadEnemySprites(base: string = ''): Promise<void> {
 
 // ── Bat draw ─────────────────────────────────────────────────────────────────
 /**
- * Draw bat centred on (cx, cy‑feet).
+ * Draw bat centred on (cx, cy) — bottom of sprite at cy (same as player).
+ * @param animState  Which animation to play
  */
 export function drawBat(
   ctx: CanvasRenderingContext2D,
@@ -60,26 +82,34 @@ export function drawBat(
   cy: number,
   time: number,
   alpha = 1,
+  animState: BatAnim = 'idle',
 ): void {
-  if (!batSheet?.naturalWidth) return;
-  const frame = Math.floor(time * BAT_FPS) % BAT_FRAMES;
+  const sheet = animState === 'idle'   ? batIdle
+              : animState === 'run'    ? batRun
+              : animState === 'attack' ? batAttack
+              :                         batHurt;
+  if (!sheet?.naturalWidth) return;
+
+  const anim  = BAT_ANIM[animState];
+  const frame = Math.floor(time * anim.fps) % anim.frames;
+
   ctx.save();
   ctx.globalAlpha *= alpha;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(
-    batSheet,
+    sheet,
     frame * BAT_FRAME_W, 0,
     BAT_FRAME_W, BAT_FRAME_H,
-    Math.round(cx - BAT_DRAW_W / 2),
-    Math.round(cy - BAT_DRAW_H),
-    BAT_DRAW_W, BAT_DRAW_H,
+    Math.round(cx - ENEMY_DRAW_SIZE / 2),
+    Math.round(cy - ENEMY_DRAW_SIZE),
+    ENEMY_DRAW_SIZE, ENEMY_DRAW_SIZE,
   );
   ctx.restore();
 }
 
 // ── Skeleton draw ─────────────────────────────────────────────────────────────
 /**
- * Draw skeleton centred on (cx, cy‑feet).
+ * Draw skeleton centred on (cx, cy) — bottom of sprite at cy (same as player).
  * @param row  Animation row: 0=walk, 1=attack, 2=hurt, 3=die, 4=idle
  */
 export function drawSkeleton(
@@ -99,9 +129,9 @@ export function drawSkeleton(
     skelSheet,
     frame * SKEL_FRAME_W, row * SKEL_FRAME_H,
     SKEL_FRAME_W, SKEL_FRAME_H,
-    Math.round(cx - SKEL_DRAW_W / 2),
-    Math.round(cy - SKEL_DRAW_H),
-    SKEL_DRAW_W, SKEL_DRAW_H,
+    Math.round(cx - ENEMY_DRAW_SIZE / 2),
+    Math.round(cy - ENEMY_DRAW_SIZE),
+    ENEMY_DRAW_SIZE, ENEMY_DRAW_SIZE,
   );
   ctx.restore();
 }

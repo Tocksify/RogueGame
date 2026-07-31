@@ -296,7 +296,7 @@ function createSkeletonBoss(): Enemy {
   return {
     id: `enemy-${enemyIdCounter++}`,
     x: 240, y: 160,
-    hp: 400, maxHp: 400, speed: 60, aggro: false,
+    hp: 400, maxHp: 400, speed: 28, aggro: false,
     lastAttackTime: 0, attackCooldown: 1000,
     waypoint: null, waypointPauseUntil: 0,
     appearance: getNpcAppearance('skeleton-boss', '#c8e8ff'),

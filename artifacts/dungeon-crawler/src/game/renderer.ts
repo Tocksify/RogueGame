@@ -1,7 +1,7 @@
 import { GameState, Doorway, Enemy, Rarity, Room, RoomType } from './types';
 import { drawSprite, PLAYER_APPEARANCE } from './sprite';
 import { drawPlayerSprite } from './playerSprite';
-import { drawBat, drawSkeleton, SKEL_ROW_WALK } from './enemySprite';
+import { drawBat, drawSkeleton, SKEL_ROW_WALK, SKEL_ROW_ATTACK, SKEL_ROW_HURT, SKEL_ROW_DIE, SKEL_ROW_IDLE } from './enemySprite';
 import { roomKey, ROOM_WIDTH, ROOM_HEIGHT, TILE_SIZE, ITEMS, RARITY_COLORS } from './world';
 
 // ── TILESET ────────────────────────────────────────────────────────────
@@ -45,6 +45,23 @@ function blitTile(ctx: CanvasRenderingContext2D, tx: number, ty: number, col: nu
   ctx.restore();
 }
 
+/** Resolve the skeleton animation row from enemy state. */
+function skelRow(enemy: Enemy): number {
+  if (enemy.dead) return SKEL_ROW_DIE;
+  if (enemy.damageFlashTime > 0) return SKEL_ROW_HURT;
+  if (Date.now() - enemy.lastAttackTime < enemy.attackCooldown * 0.35) return SKEL_ROW_ATTACK;
+  if (enemy.aggro) return SKEL_ROW_WALK;
+  return SKEL_ROW_IDLE;
+}
+
+/** Resolve the bat animation state from enemy state. */
+function batAnim(enemy: Enemy): 'idle' | 'run' | 'attack' | 'hurt' {
+  if (enemy.damageFlashTime > 0) return 'hurt';
+  if (Date.now() - enemy.lastAttackTime < enemy.attackCooldown * 0.35) return 'attack';
+  if (enemy.aggro) return 'run';
+  return 'idle';
+}
+
 /** Draw an enemy using its real sprite sheet (if available) or fall back to the procedural sprite. */
 function drawEnemySprite(
   ctx: CanvasRenderingContext2D,
@@ -53,9 +70,9 @@ function drawEnemySprite(
   alpha = 1,
 ): void {
   if (enemy.spriteType === 'bat') {
-    drawBat(ctx, enemy.x, enemy.y, time, alpha);
+    drawBat(ctx, enemy.x, enemy.y, time, alpha, batAnim(enemy));
   } else if (enemy.spriteType === 'skeleton') {
-    drawSkeleton(ctx, enemy.x, enemy.y, time, alpha, SKEL_ROW_WALK);
+    drawSkeleton(ctx, enemy.x, enemy.y, time, alpha, skelRow(enemy));
   } else {
     ctx.save();
     ctx.globalAlpha *= alpha;

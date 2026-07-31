@@ -215,28 +215,35 @@ export function update(
     const newX = state.player.x + moveDir.x * state.player.speed * dt;
     const newY = state.player.y + moveDir.y * state.player.speed * dt;
 
-    const canMove = newX >= xMin && newX <= xMax && newY >= yMin && newY <= yMax;
-
-    let enemyCollision = false;
-    for (const enemy of room.enemies) {
-      if (enemy.dead) continue;
-      if (distance({ x: newX, y: newY }, enemy) < PLAYER_HITBOX_RADIUS + ENEMY_HITBOX_RADIUS) {
-        enemyCollision = true;
-        break;
+    // Axis-separated collision: try full move, then X-only, then Y-only.
+    // This lets the player slide along enemies/NPCs instead of getting stuck.
+    function collidesWithEnemies(px: number, py: number): boolean {
+      for (const enemy of room.enemies) {
+        if (enemy.dead) continue;
+        if (distance({ x: px, y: py }, enemy) < PLAYER_HITBOX_RADIUS + ENEMY_HITBOX_RADIUS) return true;
       }
+      return false;
+    }
+    function collidesWithNpcs(px: number, py: number): boolean {
+      for (const npc of room.npcs) {
+        if (distance({ x: px, y: py }, npc) < PLAYER_HITBOX_RADIUS + NPC_HITBOX_RADIUS) return true;
+      }
+      return false;
+    }
+    function inBounds(px: number, py: number): boolean {
+      return px >= xMin && px <= xMax && py >= yMin && py <= yMax;
     }
 
-    let npcCollision = false;
-    for (const npc of room.npcs) {
-      if (distance({ x: newX, y: newY }, npc) < PLAYER_HITBOX_RADIUS + NPC_HITBOX_RADIUS) {
-        npcCollision = true;
-        break;
-      }
-    }
-
-    if (canMove && !enemyCollision && !npcCollision) {
+    // Try full move
+    if (inBounds(newX, newY) && !collidesWithEnemies(newX, newY) && !collidesWithNpcs(newX, newY)) {
       state.player.x = newX;
       state.player.y = newY;
+    // Slide along Y (X blocked)
+    } else if (inBounds(state.player.x, newY) && !collidesWithEnemies(state.player.x, newY) && !collidesWithNpcs(state.player.x, newY)) {
+      state.player.y = newY;
+    // Slide along X (Y blocked)
+    } else if (inBounds(newX, state.player.y) && !collidesWithEnemies(newX, state.player.y) && !collidesWithNpcs(newX, state.player.y)) {
+      state.player.x = newX;
     }
 
     // Update facing direction from movement vector
