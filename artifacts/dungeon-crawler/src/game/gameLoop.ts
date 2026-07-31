@@ -17,6 +17,36 @@ import {
   recalculateStats,
   removeItem,
 } from './inventory';
+import {
+  sfxDoorEnter,
+  sfxInventoryOpen,
+  sfxInventoryClose,
+  sfxHotbarSelect,
+  sfxUseItem,
+  sfxShopOpen,
+  sfxShrineActivate,
+  sfxShrineGrantHp,
+  sfxShrineUsed,
+  sfxPickupItem,
+  sfxTrapTrigger,
+  sfxTrapReset,
+  sfxAttackSwing,
+  sfxAttackHit,
+  sfxAttackMiss,
+  sfxPlayerHurt,
+  sfxPlayerDeath,
+  sfxEnemyHurt,
+  sfxEnemyDeath,
+  sfxEnemyExplode,
+  sfxEnemyAlert,
+  sfxHealConsume,
+  sfxRoomEnterNormal,
+  sfxRoomEnterShop,
+  sfxRoomEnterTreasure,
+  sfxRoomEnterTrap,
+  sfxRoomEnterShrine,
+  sfxRoomEnterHallway,
+} from './audio';
 
 const PLAYER_HITBOX_RADIUS = 12;
 const ENEMY_HITBOX_RADIUS = 14;
@@ -60,6 +90,11 @@ export function update(
     state.roomEntryText = null;
   }
 
+  // Expire item pickup banner
+  if (state.itemPickupBanner && Date.now() - state.itemPickupBanner.startTime > 2000) {
+    state.itemPickupBanner = null;
+  }
+
   // If in transition, don't update game state
   if (state.transition && state.transition.active) {
     const elapsed = Date.now() - state.transition.startTime;
@@ -69,10 +104,18 @@ export function update(
       state.player.y = state.transition.entryPoint.y;
       state.transition = null;
 
-      // Show room label on entry
+      // Show room label on entry + play room-type sound
       const newRoom = state.rooms.get(roomKey(state.currentRoom));
       if (newRoom?.label) {
         state.roomEntryText = { text: newRoom.label, startTime: Date.now() };
+      }
+      switch (newRoom?.roomType) {
+        case 'shop':        sfxRoomEnterShop();      break;
+        case 'treasure':    sfxRoomEnterTreasure();  break;
+        case 'trap':        sfxRoomEnterTrap();      break;
+        case 'advancement': sfxRoomEnterShrine();    break;
+        case 'hallway':     sfxRoomEnterHallway();   break;
+        default:            sfxRoomEnterNormal();    break;
       }
     }
     return;
@@ -111,6 +154,7 @@ export function update(
   // Inventory input
   if (input.isKeyDown('e')) {
     state.inventoryOpen = !state.inventoryOpen;
+    state.inventoryOpen ? sfxInventoryOpen() : sfxInventoryClose();
     input.keys.delete('e');
   }
   if (state.inventoryOpen) return;
@@ -124,6 +168,7 @@ export function update(
         tryUseHotbarItem(state, slotIndex);
       } else {
         state.player.selectedHotbarSlot = slotIndex;
+        sfxHotbarSelect();
       }
       input.keys.delete(i.toString());
     }
@@ -198,6 +243,7 @@ export function update(
   // Check doorway transitions
   for (const doorway of room.doorways) {
     if (isPlayerAtDoorway(state.player, doorway)) {
+      sfxDoorEnter();
       startRoomTransition(state, doorway);
       return;
     }
@@ -221,21 +267,27 @@ export function update(
       if (input.isKeyDown('f')) {
         if (npc.isShopkeeper) {
           state.shopOpen = true;
+          sfxShopOpen();
         } else if (npc.isShrine && !npc.shrineUsed) {
           // Shrine blessing
+          sfxShrineActivate();
           npc.shrineUsed = true;
           const effect = npc.shrineEffect ?? 'hp';
           if (effect === 'hp') {
             state.player.maxHp += 25;
             state.player.hp = Math.min(state.player.maxHp, state.player.hp + 25);
             addFloatingText(state, '+25 MAX HP!', state.player.x, state.player.y - 30);
+            sfxShrineGrantHp();
           } else if (effect === 'atk') {
             addFloatingText(state, '+10 ATK!', state.player.x, state.player.y - 30);
+            sfxShrineGrantHp();
           }
           state.screenFlash = { color: '#aaddff', alpha: 0.35, startTime: Date.now(), duration: 500 };
           state.dialogue.active = true;
           state.dialogue.npcId = npc.id;
           state.dialogue.currentLine = 0;
+        } else if (npc.isShrine && npc.shrineUsed) {
+          sfxShrineUsed();
         } else if (!npc.isShrine) {
           state.dialogue.active = true;
           state.dialogue.npcId = npc.id;
@@ -253,7 +305,10 @@ export function update(
     if (distance(state.player, item) < ITEM_PICKUP_RADIUS) {
       addItem(state.player, item.itemId, 1);
       const itemDef = ITEMS[item.itemId];
-      addFloatingText(state, `+${itemDef?.name ?? item.itemId}`, item.x, item.y - 10);
+      const itemName = itemDef?.name ?? item.itemId;
+      // Show centered top-screen banner instead of floor-level floating text
+      state.itemPickupBanner = { text: `+ ${itemName}`, startTime: Date.now() };
+      sfxPickupItem();
       room.items.splice(i, 1);
       recalculateStats(state.player);
     }
@@ -271,7 +326,10 @@ export function update(
           trap.triggerFlash = 1;
           damagePlayer(state, trap.damage);
           addFloatingText(state, 'TRAP!', state.player.x, state.player.y - 20);
+          sfxTrapTrigger();
         }
+      } else if (trap.triggerFlash > 0.05 && trap.triggerFlash - dt * 3 <= 0.05) {
+        sfxTrapReset(); // spikes retract
       }
       // Decay flash
       if (trap.triggerFlash > 0) {
@@ -284,6 +342,7 @@ export function update(
   for (const enemy of room.enemies) {
     if (enemy.dead) continue;
     const distToPlayer = distance(enemy, state.player);
+    if (distToPlayer < 180 && !enemy.aggro) sfxEnemyAlert();
     if (distToPlayer < 180) enemy.aggro = true;
 
     if (enemy.aggro) {
@@ -341,6 +400,7 @@ export function update(
     if (enemy.dead && enemy.enemyType === 'chaser' && !enemy.exploded) {
       if (Date.now() >= (enemy.explodeTime ?? Infinity)) {
         enemy.exploded = true;
+        sfxEnemyExplode();
         if (distance(state.player, enemy) <= (enemy.explodeRadius ?? 90)) {
           damagePlayer(state, enemy.explodeDamage ?? 40);
           addFloatingText(state, 'BOOM!', enemy.x, enemy.y - 30);
@@ -372,6 +432,8 @@ function tryUseHotbarItem(state: GameState, slotIndex: number): void {
 
   if (item?.type === 'consumable' && item.healAmount) {
     if (useConsumable(state.player, itemId)) {
+      sfxHealConsume();
+      sfxUseItem();
       addFloatingText(state, `+${item.healAmount} HP`, state.player.x, state.player.y - 20);
       const invItem = state.player.inventory.find(i => i.itemId === itemId);
       if (!invItem || invItem.quantity === 0) {
@@ -414,7 +476,10 @@ function performPlayerAttack(state: GameState, canvasWidth: number, canvasHeight
     duration: 150,
   };
 
+  sfxAttackSwing();
+
   const damage = getAttackDamage(state.player);
+  let hitAny = false;
 
   for (const enemy of room.enemies) {
     if (enemy.dead) continue;
@@ -426,9 +491,11 @@ function performPlayerAttack(state: GameState, canvasWidth: number, canvasHeight
     if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
 
     if (angleDiff <= ATTACK_ARC_ANGLE / 2) {
+      hitAny = true;
       enemy.hp -= damage;
       enemy.damageFlashTime = 0.15;
       addDamageNumber(state, damage, '#ffffff', enemy.x, enemy.y - 20);
+      sfxEnemyHurt();
 
       if (enemy.hp <= 0) {
         enemy.dead = true;
@@ -437,6 +504,9 @@ function performPlayerAttack(state: GameState, canvasWidth: number, canvasHeight
           enemy.explodeTime = enemy.deathTime + enemy.explodeDelay;
           enemy.exploded = false;
           addFloatingText(state, '!', enemy.x, enemy.y - 30);
+          sfxEnemyExplode();
+        } else {
+          sfxEnemyDeath();
         }
         const room2 = getCurrentRoom(state);
         if (room2) {
@@ -451,6 +521,8 @@ function performPlayerAttack(state: GameState, canvasWidth: number, canvasHeight
       }
     }
   }
+
+  if (!hitAny) sfxAttackMiss();
 }
 
 function triggerProvidence(state: GameState, room: Room): void {
@@ -481,6 +553,11 @@ function damagePlayer(state: GameState, damage: number): void {
   state.player.hp -= damage;
   state.player.damageFlashTime = 0.2;
   addDamageNumber(state, damage, '#cc2936', state.player.x, state.player.y - 20);
+  if (state.player.hp <= 0) {
+    sfxPlayerDeath();
+  } else {
+    sfxPlayerHurt();
+  }
   if (state.player.hp <= 0) state.player.hp = 0;
 }
 

@@ -209,4 +209,5 @@ export interface GameState {
   screenFlash: ScreenFlash | null;
   visitedRooms: Set<string>;
   roomEntryText: { text: string; startTime: number } | null;
+  itemPickupBanner: { text: string; startTime: number } | null;
 }

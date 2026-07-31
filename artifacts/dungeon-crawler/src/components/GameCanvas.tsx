@@ -94,6 +94,7 @@ export default function GameCanvas() {
         screenFlash: null,
         visitedRooms: new Set<string>(['0,0']),
         roomEntryText: null,
+        itemPickupBanner: null,
       };
     }
 

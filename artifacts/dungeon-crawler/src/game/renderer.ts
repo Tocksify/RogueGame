@@ -391,6 +391,25 @@ export function render(
     ctx.restore();
   }
 
+  // Item pickup banner — bold yellow, top-center
+  if (state.itemPickupBanner) {
+    const BANNER_DURATION = 2000;
+    const elapsed = Date.now() - state.itemPickupBanner.startTime;
+    const t = elapsed / BANNER_DURATION;
+    // Fade in 0–15%, hold, fade out 75–100%
+    const alpha = t < 0.15 ? t / 0.15 : t > 0.75 ? (1 - t) / 0.25 : 1;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.font = 'bold 16px "Space Mono", monospace';
+    ctx.textAlign = 'center';
+    // Drop shadow for legibility
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillText(state.itemPickupBanner.text, canvasWidth / 2 + 1, 85 + 1);
+    ctx.fillStyle = '#ffe066';
+    ctx.fillText(state.itemPickupBanner.text, canvasWidth / 2, 85);
+    ctx.restore();
+  }
+
   if (state.dialogue.active) {
     drawDialogue(ctx, state, canvasWidth, canvasHeight);
   }
