@@ -5,6 +5,7 @@ import { PLAYER_APPEARANCE } from '../game/sprite';
 import { InputState } from '../game/input';
 import { update } from '../game/gameLoop';
 import { render } from '../game/renderer';
+import { loadPlayerSprites } from '../game/playerSprite';
 import { equipItem, unequipItem, removeItem, addItem, buyItem, recalculateStats } from '../game/inventory';
 
 // ── RAINBOW CSS ───────────────────────────────────────────────────────
@@ -58,6 +59,9 @@ export default function GameCanvas() {
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
+    // Load player sprite sheets (non-blocking — renders fall back to nothing until ready)
+    loadPlayerSprites();
+
     if (!gameStateRef.current) {
       const rooms = createWorld();
       const player: Player = {
@@ -74,6 +78,8 @@ export default function GameCanvas() {
         hotbar: [null, null, null, null, null, null],
         selectedHotbarSlot: 0,
         gold: 999999,
+        facingAngle: Math.PI / 2, // default facing south (down)
+        isMoving: false,
       };
 
       gameStateRef.current = {

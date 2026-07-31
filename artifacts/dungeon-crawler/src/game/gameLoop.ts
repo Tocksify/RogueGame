@@ -238,6 +238,12 @@ export function update(
       state.player.x = newX;
       state.player.y = newY;
     }
+
+    // Update facing direction from movement vector
+    state.player.facingAngle = Math.atan2(moveDir.y, moveDir.x);
+    state.player.isMoving = true;
+  } else {
+    state.player.isMoving = false;
   }
 
   // Check doorway transitions

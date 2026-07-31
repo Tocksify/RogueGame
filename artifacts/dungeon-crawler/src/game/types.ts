@@ -79,6 +79,9 @@ export interface Player {
   hotbar: (string | null)[]; // 6 slots, item IDs
   selectedHotbarSlot: number;
   gold: number;
+  // Animation state
+  facingAngle: number; // radians, updated when moving (atan2 in screen space)
+  isMoving: boolean;
 }
 
 export interface Enemy {

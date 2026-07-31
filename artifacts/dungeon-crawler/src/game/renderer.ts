@@ -1,5 +1,6 @@
 import { GameState, Doorway, Rarity, Room, RoomType } from './types';
 import { drawSprite, PLAYER_APPEARANCE } from './sprite';
+import { drawPlayerSprite } from './playerSprite';
 import { roomKey, ROOM_WIDTH, ROOM_HEIGHT, TILE_SIZE, ITEMS, RARITY_COLORS } from './world';
 
 // ── PALETTE ───────────────────────────────────────────────────────────
@@ -580,7 +581,14 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
   }
 
   // Player sprite
-  drawSprite(ctx, state.player.x - 16, state.player.y - 32, PLAYER_APPEARANCE);
+  drawPlayerSprite(
+    ctx,
+    state.player.x,
+    state.player.y,
+    state.player.facingAngle,
+    state.player.isMoving,
+    state.time,
+  );
 
   // Player HP bar (in-world)
   const pw = 40, ph = 5;
