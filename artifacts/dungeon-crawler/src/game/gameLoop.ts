@@ -48,15 +48,19 @@ import {
   sfxRoomEnterHallway,
 } from './audio';
 
-const PLAYER_HITBOX_RADIUS = 20;
-const ENEMY_HITBOX_RADIUS = 20;
+export const PLAYER_HITBOX_RADIUS = 20;
+export const ENEMY_HITBOX_RADIUS = 20;
 const NPC_HITBOX_RADIUS = 14;
 const ITEM_PICKUP_RADIUS = 16;
 const ATTACK_RANGE = 60;
 const ATTACK_ARC_ANGLE = Math.PI / 2;
 // Hitbox center is above the feet (bottom-anchor) to align with the visible character body.
 // player.y is the feet; hitbox center is (player.x, player.y - HITBOX_OFFSET_Y).
-const HITBOX_OFFSET_Y = 36;
+export const HITBOX_OFFSET_Y = 36;
+// Enemies and NPCs use the same bottom-anchor convention. These offsets bring
+// the collision center up from the feet to the visible body centre.
+export const ENEMY_HITBOX_OFFSET_Y = 30; // sprite is 84 px tall; body centre ~30 px above feet
+export const NPC_HITBOX_OFFSET_Y = 16;   // procedural sprite; body centre ~16 px above npc.y
 // Door trigger: fires when the hitbox CENTER is within this many px of the wall.
 // Must be > wallPadding so the trigger zone is reachable.
 const DOOR_THRESHOLD = 56;
@@ -71,6 +75,20 @@ function distance(a: Vector2, b: Vector2): number {
 
 function angle(from: Vector2, to: Vector2): number {
   return Math.atan2(to.y - from.y, to.x - from.x);
+}
+
+// ── Hitbox-centre helpers ────────────────────────────────────────────────────
+// All sprites are bottom-anchored; .y is the feet. These return the
+// collision circle centre in world space so every distance/angle call is
+// consistent with the visible body.
+function playerCenter(p: { x: number; y: number }): Vector2 {
+  return { x: p.x, y: p.y - HITBOX_OFFSET_Y };
+}
+function enemyCenter(e: { x: number; y: number }): Vector2 {
+  return { x: e.x, y: e.y - ENEMY_HITBOX_OFFSET_Y };
+}
+function npcCenter(n: { x: number; y: number }): Vector2 {
+  return { x: n.x, y: n.y - NPC_HITBOX_OFFSET_Y };
 }
 
 export function update(
@@ -224,16 +242,17 @@ export function update(
     // Axis-separated collision: try full move, then X-only, then Y-only.
     // This lets the player slide along enemies/NPCs instead of getting stuck.
     function collidesWithEnemies(px: number, py: number): boolean {
+      const pc = { x: px, y: py - HITBOX_OFFSET_Y };
       for (const enemy of room.enemies) {
         if (enemy.dead) continue;
-        if (distance({ x: px, y: py }, enemy) < PLAYER_HITBOX_RADIUS + ENEMY_HITBOX_RADIUS) return true;
+        if (distance(pc, enemyCenter(enemy)) < PLAYER_HITBOX_RADIUS + ENEMY_HITBOX_RADIUS) return true;
       }
       return false;
     }
     function collidesWithNpcs(px: number, py: number): boolean {
+      const pc = { x: px, y: py - HITBOX_OFFSET_Y };
       for (const npc of room.npcs) {
-        // Use player body center (offset up) vs NPC position (already body-centered)
-        if (distance({ x: px, y: py - HITBOX_OFFSET_Y }, npc) < PLAYER_HITBOX_RADIUS + NPC_HITBOX_RADIUS) return true;
+        if (distance(pc, npcCenter(npc)) < PLAYER_HITBOX_RADIUS + NPC_HITBOX_RADIUS) return true;
       }
       return false;
     }
@@ -288,7 +307,7 @@ export function update(
   // NPC interaction
   state.nearbyNpc = null;
   for (const npc of room.npcs) {
-    const dist = distance(state.player, npc);
+    const dist = distance(playerCenter(state.player), npcCenter(npc));
     if (dist < 45) {
       state.nearbyNpc = npc.id;
       if (input.isKeyDown('f')) {
@@ -368,7 +387,7 @@ export function update(
   // Enemy AI
   for (const enemy of room.enemies) {
     if (enemy.dead) continue;
-    const distToPlayer = distance(enemy, state.player);
+    const distToPlayer = distance(enemyCenter(enemy), playerCenter(state.player));
     // Enemies only aggro after the player lands a hit on them
     if (enemy.hasBeenHit && !enemy.aggro) {
       sfxEnemyAlert();
@@ -376,7 +395,7 @@ export function update(
     }
 
     if (enemy.aggro) {
-      const ang = angle(enemy, state.player);
+      const ang = angle(enemyCenter(enemy), playerCenter(state.player));
       enemy.x += Math.cos(ang) * enemy.speed * dt;
       enemy.y += Math.sin(ang) * enemy.speed * dt;
 
@@ -412,9 +431,9 @@ export function update(
     // Push-apart: never let an enemy occupy the same space as the player.
     // After every move, if they overlap, push the enemy back out.
     const MIN_DIST = PLAYER_HITBOX_RADIUS + ENEMY_HITBOX_RADIUS;
-    const postDist = distance(enemy, state.player);
+    const postDist = distance(enemyCenter(enemy), playerCenter(state.player));
     if (postDist < MIN_DIST && postDist > 0.01) {
-      const pushAng = angle(state.player, enemy); // away from player
+      const pushAng = angle(playerCenter(state.player), enemyCenter(enemy)); // away from player
       const overlap = MIN_DIST - postDist;
       enemy.x += Math.cos(pushAng) * overlap;
       enemy.y += Math.sin(pushAng) * overlap;
@@ -445,7 +464,7 @@ export function update(
       if (Date.now() >= (enemy.explodeTime ?? Infinity)) {
         enemy.exploded = true;
         sfxEnemyExplode();
-        if (distance(state.player, enemy) <= (enemy.explodeRadius ?? 90)) {
+        if (distance(playerCenter(state.player), enemyCenter(enemy)) <= (enemy.explodeRadius ?? 90)) {
           damagePlayer(state, enemy.explodeDamage ?? 40);
           addFloatingText(state, 'BOOM!', enemy.x, enemy.y - 30);
         }
@@ -527,10 +546,10 @@ function performPlayerAttack(state: GameState, canvasWidth: number, canvasHeight
 
   for (const enemy of room.enemies) {
     if (enemy.dead) continue;
-    const dist = distance(state.player, enemy);
+    const dist = distance(playerCenter(state.player), enemyCenter(enemy));
     if (dist > ATTACK_RANGE) continue;
 
-    const angleToEnemy = angle(state.player, enemy);
+    const angleToEnemy = angle(playerCenter(state.player), enemyCenter(enemy));
     let angleDiff = Math.abs(angleToEnemy - attackAngle);
     if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
 
@@ -573,7 +592,7 @@ function performPlayerAttack(state: GameState, canvasWidth: number, canvasHeight
 function triggerProvidence(state: GameState, room: Room): void {
   for (const enemy of room.enemies) {
     if (enemy.dead) continue;
-    if (distance(state.player, enemy) <= PROVIDENCE_RADIUS) {
+    if (distance(playerCenter(state.player), enemyCenter(enemy)) <= PROVIDENCE_RADIUS) {
       const dmg = Math.max(1, Math.round(enemy.maxHp * 0.4));
       enemy.hp -= dmg;
       enemy.damageFlashTime = 0.4;

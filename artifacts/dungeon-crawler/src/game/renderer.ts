@@ -3,6 +3,7 @@ import { drawSprite, PLAYER_APPEARANCE } from './sprite';
 import { drawPlayerSprite } from './playerSprite';
 import { drawBat, drawSkeleton, SKEL_ROW_WALK, SKEL_ROW_ATTACK, SKEL_ROW_HURT, SKEL_ROW_DIE, SKEL_ROW_IDLE } from './enemySprite';
 import { roomKey, ROOM_WIDTH, ROOM_HEIGHT, TILE_SIZE, ITEMS, RARITY_COLORS } from './world';
+import { HITBOX_OFFSET_Y, PLAYER_HITBOX_RADIUS, ENEMY_HITBOX_RADIUS, ENEMY_HITBOX_OFFSET_Y } from './gameLoop';
 
 // ── TILESET ────────────────────────────────────────────────────────────
 let tilesetImg: HTMLImageElement | null = null;
@@ -692,7 +693,20 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
     state.time,
   );
 
-  // Player HP bar removed — shown in the HUD (top-left corner)
+  // Player hitbox — always visible, semi-transparent
+  {
+    const hx = state.player.x;
+    const hy = state.player.y - HITBOX_OFFSET_Y;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(hx, hy, PLAYER_HITBOX_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(68, 170, 255, 0.18)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(68, 170, 255, 0.55)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
 
   // Attack arc
   if (state.attackArc) {
