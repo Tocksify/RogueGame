@@ -54,9 +54,12 @@ const NPC_HITBOX_RADIUS = 14;
 const ITEM_PICKUP_RADIUS = 16;
 const ATTACK_RANGE = 60;
 const ATTACK_ARC_ANGLE = Math.PI / 2;
-// Door trigger threshold: player must be within this many pixels of the wall edge.
-// Must be >= wallPadding (PLAYER_HITBOX_RADIUS + 16 = 28) so the door is reachable.
-const DOOR_THRESHOLD = 36;
+// Hitbox center is above the feet (bottom-anchor) to align with the visible character body.
+// player.y is the feet; hitbox center is (player.x, player.y - HITBOX_OFFSET_Y).
+const HITBOX_OFFSET_Y = 36;
+// Door trigger: fires when the hitbox CENTER is within this many px of the wall.
+// Must be > wallPadding so the trigger zone is reachable.
+const DOOR_THRESHOLD = 56;
 const DOORWAY_HALF_WIDTH = 40; // half-width of the door opening in pixels
 const PROVIDENCE_RADIUS = 220;
 
@@ -183,18 +186,20 @@ export function update(
   const room = getCurrentRoom(state);
   if (!room) return;
 
-  // Determine movement bounds (narrowed for hallways)
-  const wallPadding = PLAYER_HITBOX_RADIUS + 16; // 28
+  // Determine movement bounds (narrowed for hallways).
+  // Bounds are in player.y (feet) coordinates. The hitbox center is at
+  // (player.x, player.y - HITBOX_OFFSET_Y), so we shift y bounds up by HITBOX_OFFSET_Y
+  // so that the hitbox center stays wallPadding away from every wall.
+  const wallPadding = PLAYER_HITBOX_RADIUS + 16; // = 36
   let xMin = wallPadding, xMax = ROOM_WIDTH - wallPadding;
-  let yMin = wallPadding, yMax = ROOM_HEIGHT - wallPadding;
+  let yMin = wallPadding + HITBOX_OFFSET_Y;               // hitbox center north limit
+  let yMax = ROOM_HEIGHT - wallPadding + HITBOX_OFFSET_Y; // hitbox center south limit
 
   if (room.roomType === 'hallway') {
     if (room.hallwayDir === 'horizontal') {
-      // Corridor runs through center rows 3-6 (tiles), with a bit of padding
-      yMin = Math.max(wallPadding, 3 * TILE_SIZE + 4);
-      yMax = Math.min(ROOM_HEIGHT - wallPadding, 7 * TILE_SIZE - 4);
+      yMin = Math.max(wallPadding + HITBOX_OFFSET_Y, 3 * TILE_SIZE + 4 + HITBOX_OFFSET_Y);
+      yMax = Math.min(ROOM_HEIGHT - wallPadding + HITBOX_OFFSET_Y, 7 * TILE_SIZE - 4 + HITBOX_OFFSET_Y);
     } else {
-      // Vertical corridor through center columns 6-8
       xMin = Math.max(wallPadding, 6 * TILE_SIZE + 4);
       xMax = Math.min(ROOM_WIDTH - wallPadding, 9 * TILE_SIZE - 4);
     }
@@ -226,7 +231,8 @@ export function update(
     }
     function collidesWithNpcs(px: number, py: number): boolean {
       for (const npc of room.npcs) {
-        if (distance({ x: px, y: py }, npc) < PLAYER_HITBOX_RADIUS + NPC_HITBOX_RADIUS) return true;
+        // Use player body center (offset up) vs NPC position (already body-centered)
+        if (distance({ x: px, y: py - HITBOX_OFFSET_Y }, npc) < PLAYER_HITBOX_RADIUS + NPC_HITBOX_RADIUS) return true;
       }
       return false;
     }
@@ -611,17 +617,20 @@ function addFloatingText(state: GameState, text: string, x: number, y: number): 
 }
 
 function isPlayerAtDoorway(player: Vector2, doorway: Doorway): boolean {
+  // Use hitbox center (body, not feet) for door triggering
+  const hitX = player.x;
+  const hitY = player.y - HITBOX_OFFSET_Y;
   const T = DOOR_THRESHOLD;
   const hw = DOORWAY_HALF_WIDTH;
   switch (doorway.side) {
     case 'north':
-      return player.y < T && player.x > ROOM_WIDTH / 2 - hw && player.x < ROOM_WIDTH / 2 + hw;
+      return hitY < T && hitX > ROOM_WIDTH / 2 - hw && hitX < ROOM_WIDTH / 2 + hw;
     case 'south':
-      return player.y > ROOM_HEIGHT - T && player.x > ROOM_WIDTH / 2 - hw && player.x < ROOM_WIDTH / 2 + hw;
+      return hitY > ROOM_HEIGHT - T && hitX > ROOM_WIDTH / 2 - hw && hitX < ROOM_WIDTH / 2 + hw;
     case 'east':
-      return player.x > ROOM_WIDTH - T && player.y > ROOM_HEIGHT / 2 - hw && player.y < ROOM_HEIGHT / 2 + hw;
+      return hitX > ROOM_WIDTH - T && hitY > ROOM_HEIGHT / 2 - hw && hitY < ROOM_HEIGHT / 2 + hw;
     case 'west':
-      return player.x < T && player.y > ROOM_HEIGHT / 2 - hw && player.y < ROOM_HEIGHT / 2 + hw;
+      return hitX < T && hitY > ROOM_HEIGHT / 2 - hw && hitY < ROOM_HEIGHT / 2 + hw;
   }
 }
 
