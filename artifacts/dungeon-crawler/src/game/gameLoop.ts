@@ -651,24 +651,28 @@ function startRoomTransition(state: GameState, doorway: Doorway): void {
 
   let entryX = ROOM_WIDTH / 2;
   let entryY = ROOM_HEIGHT / 2;
-  const padding = 40;
+  // xPadding only needs to clear wallPadding (36).
+  // yPadding must also clear HITBOX_OFFSET_Y (36) because player.y is feet and
+  // yMin = wallPadding + HITBOX_OFFSET_Y = 72; spawning below that locks movement.
+  const xPadding = 48;
+  const yPadding = 80; // >= wallPadding(36) + HITBOX_OFFSET_Y(36) + buffer(8)
 
   // For hallway rooms, spawn player in the corridor center
   const destRoom = state.rooms.get(toRoomKey);
   if (destRoom?.roomType === 'hallway') {
     if (destRoom.hallwayDir === 'horizontal') {
       entryY = ROOM_HEIGHT / 2;
-      entryX = doorway.side === 'east' ? padding : ROOM_WIDTH - padding;
+      entryX = doorway.side === 'east' ? xPadding : ROOM_WIDTH - xPadding;
     } else {
       entryX = ROOM_WIDTH / 2;
-      entryY = doorway.side === 'south' ? padding : ROOM_HEIGHT - padding;
+      entryY = doorway.side === 'south' ? yPadding : ROOM_HEIGHT - yPadding;
     }
   } else {
     switch (doorway.side) {
-      case 'north': entryY = ROOM_HEIGHT - padding; break;
-      case 'south': entryY = padding; break;
-      case 'east':  entryX = padding; break;
-      case 'west':  entryX = ROOM_WIDTH - padding; break;
+      case 'north': entryY = ROOM_HEIGHT - yPadding; break;
+      case 'south': entryY = yPadding; break;
+      case 'east':  entryX = xPadding; break;
+      case 'west':  entryX = ROOM_WIDTH - xPadding; break;
     }
   }
 
