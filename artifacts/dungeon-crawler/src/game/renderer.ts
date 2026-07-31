@@ -630,16 +630,16 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
         ctx.restore();
 
         ctx.save();
-        drawEnemySprite(ctx, enemy, frame / 60, 0.8);
+        drawEnemySprite(ctx, enemy, frame, 0.8);
         ctx.restore();
       } else if (enemy.enemyType === 'chaser' && enemy.exploded) {
         const elapsed = Date.now() - (enemy.explodeTime ?? enemy.deathTime);
         ctx.save();
-        drawEnemySprite(ctx, enemy, frame / 60, 1 - Math.min(1, elapsed / 600));
+        drawEnemySprite(ctx, enemy, frame, 1 - Math.min(1, elapsed / 600));
         ctx.restore();
       } else {
         ctx.save();
-        drawEnemySprite(ctx, enemy, frame / 60, 1 - Math.min(1, (Date.now() - enemy.deathTime) / 2000));
+        drawEnemySprite(ctx, enemy, frame, 1 - Math.min(1, (Date.now() - enemy.deathTime) / 2000));
         ctx.restore();
       }
       continue;
@@ -656,7 +656,7 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
     }
 
     ctx.save();
-    drawEnemySprite(ctx, enemy, frame / 60);
+    drawEnemySprite(ctx, enemy, frame);
     ctx.restore();
 
     if (!enemy.isBoss) {

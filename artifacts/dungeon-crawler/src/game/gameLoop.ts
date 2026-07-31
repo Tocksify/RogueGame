@@ -391,6 +391,20 @@ export function update(
         }
       }
     }
+
+    // Push-apart: never let an enemy occupy the same space as the player.
+    // After every move, if they overlap, push the enemy back out.
+    const MIN_DIST = PLAYER_HITBOX_RADIUS + ENEMY_HITBOX_RADIUS;
+    const postDist = distance(enemy, state.player);
+    if (postDist < MIN_DIST && postDist > 0.01) {
+      const pushAng = angle(state.player, enemy); // away from player
+      const overlap = MIN_DIST - postDist;
+      enemy.x += Math.cos(pushAng) * overlap;
+      enemy.y += Math.sin(pushAng) * overlap;
+    } else if (postDist <= 0.01) {
+      // Exactly on top — push in a fixed direction to avoid NaN
+      enemy.x += MIN_DIST;
+    }
   }
 
   // Fade damage flash
