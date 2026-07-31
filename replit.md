@@ -1,45 +1,41 @@
 # Dungeon Crawler
 
-A canvas-based dungeon crawler game built with React/Vite, an Express API backend, and PostgreSQL via Drizzle ORM.
-
-## Project structure
-
-```
-artifacts/
-  dungeon-crawler/   — React/Vite frontend (the game)
-  api-server/        — Express API backend
-  mockup-sandbox/    — Design canvas preview server
-lib/
-  api-client-react/  — Shared React API client
-  api-spec/          — Shared API spec
-  api-zod/           — Shared Zod schemas
-  db/                — Drizzle ORM + PostgreSQL schema
-```
-
-## Running the project
-
-| Service | Workflow |
-|---------|----------|
-| Game (frontend) | `artifacts/dungeon-crawler: web` — `pnpm --filter @workspace/dungeon-crawler run dev` |
-| API server | `artifacts/api-server: API Server` — `pnpm --filter @workspace/api-server run dev` |
-
-Dependencies are managed with `pnpm` at the workspace root. Run `pnpm install` to install all packages.
-
-## Database
-
-Uses Replit's built-in PostgreSQL. The `DATABASE_URL` environment variable is provided automatically. Schema is defined in `lib/db/src/schema/` using Drizzle ORM. Push schema changes with:
-
-```sh
-cd lib/db && pnpm run push
-```
+A canvas-based dungeon crawler game built with React/Vite, an Express API backend, and a pnpm monorepo workspace.
 
 ## Stack
 
-- **Frontend:** React 19, Vite 7, Tailwind CSS 4, Wouter, shadcn/ui components
-- **Backend:** Express 5, Pino (logging)
-- **Database:** PostgreSQL, Drizzle ORM
-- **Language:** TypeScript throughout
+- **Frontend** (`artifacts/dungeon-crawler`): React + Vite + Tailwind CSS, canvas game engine
+- **Backend** (`artifacts/api-server`): Express 5, Drizzle ORM, PostgreSQL
+- **Shared libraries** (`lib/`): `db` (Drizzle schema + client), `api-spec`, `api-zod`, `api-client-react`
+- **Game assets**: Tilesets, character sprites, enemy sprites (in `Tileset/`, `OurCharacter/`, `RogueEnemies/`, `Idle_new/`)
+
+## How to run
+
+Dependencies are managed with pnpm. After cloning or merging changes:
+
+```bash
+pnpm install
+```
+
+Two workflows start automatically:
+- **Dungeon Crawler** (`artifacts/dungeon-crawler: web`) — Vite dev server on `PORT` (default 21601), preview at `/`
+- **API Server** (`artifacts/api-server: API Server`) — Express on port 8080, preview at `/api`
+
+## Environment variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | Yes (auto-set by Replit) | PostgreSQL connection string |
+| `SESSION_SECRET` | Yes | Secret for session signing |
+| `PORT` | Yes (auto-set) | Port each service listens on |
+| `BASE_PATH` | Yes (auto-set) | Base URL path for the frontend |
+
+## Game controls
+
+- **Arrow keys / WASD** — Move
+- **LMB** — Attack
+- **E** — Inventory
+- **F** — Talk/Shop
+- **0–6 / num** — Use item
 
 ## User preferences
-
-<!-- Add any preferences the user asks you to remember here -->
