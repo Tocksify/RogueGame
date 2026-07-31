@@ -49,4 +49,18 @@ export class InputState {
     this.mouseJustPressed = false;
     return val;
   }
+
+  // Virtual key injection for mobile controls
+  pressVirtualKey(key: string): void {
+    this.keys.add(key.toLowerCase());
+  }
+
+  releaseVirtualKey(key: string): void {
+    this.keys.delete(key.toLowerCase());
+  }
+
+  // Trigger a mouse click from mobile attack button
+  triggerMouseClick(): void {
+    this.mouseJustPressed = true;
+  }
 }

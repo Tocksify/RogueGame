@@ -9,6 +9,7 @@ import { loadPlayerSprites } from '../game/playerSprite';
 import { loadEnemySprites } from '../game/enemySprite';
 import { loadTileset } from '../game/renderer';
 import { equipItem, unequipItem, removeItem, addItem, buyItem, recalculateStats } from '../game/inventory';
+import MobileControls from './MobileControls';
 
 // ── RAINBOW CSS ───────────────────────────────────────────────────────
 const RAINBOW_STYLE = `
@@ -204,10 +205,36 @@ export default function GameCanvas() {
     return false;
   };
 
+  // ── Mobile control callbacks ─────────────────────────────────────────
+  const handleMobileAttack = () => {
+    const input = inputRef.current;
+    const state = gameStateRef.current;
+    const canvas = canvasRef.current;
+    if (!input || !state || !canvas) return;
+    // Aim in the player's current facing direction so the attack goes the right way
+    input.mousePos.x = canvas.width  / 2 + Math.cos(state.player.facingAngle) * 120;
+    input.mousePos.y = canvas.height / 2 + Math.sin(state.player.facingAngle) * 120;
+    input.triggerMouseClick();
+  };
+
+  const handleMobileToggleInventory = () => {
+    // Inject virtual 'e' — the game loop consumes it and handles audio/state
+    inputRef.current?.pressVirtualKey('e');
+  };
+
   return (
     <>
       <style>{RAINBOW_STYLE}</style>
       <canvas ref={canvasRef} className="block w-full h-full" style={{ cursor: 'none' }} />
+
+      <MobileControls
+        inputRef={inputRef}
+        inventoryOpen={inventoryOpen}
+        shopOpen={shopOpen}
+        onAttack={handleMobileAttack}
+        onToggleInventory={handleMobileToggleInventory}
+        onCloseInventory={handleInventoryClose}
+      />
 
       {inventoryOpen && gameStateRef.current && (
         <InventoryOverlay
