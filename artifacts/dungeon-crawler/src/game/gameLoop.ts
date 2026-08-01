@@ -63,7 +63,7 @@ export const ENEMY_HITBOX_OFFSET_Y = 30; // sprite is 84 px tall; body centre ~3
 export const NPC_HITBOX_OFFSET_Y = 16;   // procedural sprite; body centre ~16 px above npc.y
 // Door trigger: fires when the hitbox CENTER is within this many px of the wall.
 // Must be > wallPadding so the trigger zone is reachable.
-const DOOR_THRESHOLD = 56;
+const DOOR_THRESHOLD = 68;
 const DOORWAY_HALF_WIDTH = 40; // half-width of the door opening in pixels
 const PROVIDENCE_RADIUS = 220;
 
