@@ -11,8 +11,11 @@
  *   bat-attack.png 512 × 64  →  8 frames  (Attack1)
  *   bat-hurt.png   320 × 64  →  5 frames  (Hurt)
  *
- * Skeleton sheet (skeleton.png):  832×320 → 13 frames × 64×64, 5 rows
- *   Row 0: walk  | Row 1: attack | Row 2: hurt | Row 3: die | Row 4: idle
+ * Skeleton sheet (skeleton.png): 64×64 frames, 4 rows
+ *   Row 0: attack  — 13 frames
+ *   Row 1: die     — 13 frames
+ *   Row 2: walk    — 12 frames
+ *   Row 3: idle    —  4 frames
  */
 
 export const ENEMY_DRAW_SIZE = 84; // matches DRAW_SIZE in playerSprite.ts
@@ -33,14 +36,27 @@ type BatAnim = keyof typeof BAT_ANIM;
 // ── Skeleton ─────────────────────────────────────────────────────────────────
 const SKEL_FRAME_W = 64;
 const SKEL_FRAME_H = 64;
-const SKEL_COLS    = 13;
-const SKEL_FPS     = 9;
 
-export const SKEL_ROW_WALK   = 0;
-export const SKEL_ROW_ATTACK = 1;
-export const SKEL_ROW_HURT   = 2;
-export const SKEL_ROW_DIE    = 3;
-export const SKEL_ROW_IDLE   = 4;
+// Row 0 = attack (13 frames), Row 1 = die (13 frames),
+// Row 2 = walk (12 frames),   Row 3 = idle (4 frames)
+export type SkelAnim = 'attack' | 'die' | 'walk' | 'idle';
+
+const SKEL_ANIM: Record<SkelAnim, { row: number; frames: number; fps: number }> = {
+  attack: { row: 0, frames: 13, fps: 9  },
+  die:    { row: 1, frames: 13, fps: 9  },
+  walk:   { row: 2, frames: 12, fps: 10 },
+  idle:   { row: 3, frames: 4,  fps: 6  },
+};
+
+/** Duration of the attack animation in milliseconds — used by AI to lock movement. */
+export const SKEL_ATTACK_DURATION_MS = (SKEL_ANIM.attack.frames / SKEL_ANIM.attack.fps) * 1000; // ~1444 ms
+
+// Keep legacy row exports so any stale imports don't break at compile time
+export const SKEL_ROW_WALK   = 2;
+export const SKEL_ROW_ATTACK = 0;
+export const SKEL_ROW_HURT   = 3; // no hurt row — fall back to idle
+export const SKEL_ROW_DIE    = 1;
+export const SKEL_ROW_IDLE   = 3;
 
 // ── Sprite sheets ─────────────────────────────────────────────────────────────
 let batIdle:   HTMLImageElement | null = null;
@@ -110,7 +126,7 @@ export function drawBat(
 // ── Skeleton draw ─────────────────────────────────────────────────────────────
 /**
  * Draw skeleton centred on (cx, cy) — bottom of sprite at cy (same as player).
- * @param row  Animation row: 0=walk, 1=attack, 2=hurt, 3=die, 4=idle
+ * @param anim  Which animation to play: 'attack' | 'die' | 'walk' | 'idle'
  */
 export function drawSkeleton(
   ctx: CanvasRenderingContext2D,
@@ -118,16 +134,17 @@ export function drawSkeleton(
   cy: number,
   time: number,
   alpha = 1,
-  row = SKEL_ROW_WALK,
+  anim: SkelAnim = 'idle',
 ): void {
   if (!skelSheet?.naturalWidth) return;
-  const frame = Math.floor(time * SKEL_FPS) % SKEL_COLS;
+  const cfg   = SKEL_ANIM[anim];
+  const frame = Math.floor(time * cfg.fps) % cfg.frames;
   ctx.save();
   ctx.globalAlpha *= alpha;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(
     skelSheet,
-    frame * SKEL_FRAME_W, row * SKEL_FRAME_H,
+    frame * SKEL_FRAME_W, cfg.row * SKEL_FRAME_H,
     SKEL_FRAME_W, SKEL_FRAME_H,
     Math.round(cx - ENEMY_DRAW_SIZE / 2),
     Math.round(cy - ENEMY_DRAW_SIZE),

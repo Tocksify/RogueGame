@@ -8,6 +8,7 @@ import {
   Doorway,
   Room,
 } from './types';
+import { SKEL_ATTACK_DURATION_MS } from './enemySprite';
 import { InputState } from './input';
 import { roomKey, ROOM_WIDTH, ROOM_HEIGHT, TILE_SIZE, ITEMS } from './world';
 import {
@@ -467,16 +468,42 @@ export function update(
     }
 
     if (enemy.aggro) {
-      const ang = angle(rectCenter(enemyRect(enemy)), rectCenter(playerRect(state.player)));
-      enemy.x += Math.cos(ang) * enemy.speed * dt;
-      enemy.y += Math.sin(ang) * enemy.speed * dt;
-
-      // Melee: attack whenever the enemy rect overlaps the player rect
-      if (rectsOverlap(enemyRect(enemy), playerRect(state.player))) {
+      if (enemy.spriteType === 'skeleton') {
+        // ── Skeleton AI ──────────────────────────────────────────────────────
+        // State: attacking (locked in place) → walk toward player → attack again
         const now = Date.now();
-        if (now - enemy.lastAttackTime >= enemy.attackCooldown) {
-          enemy.lastAttackTime = now;
-          damagePlayer(state, 8);
+        const isInAttackAnim = now - enemy.lastAttackTime < SKEL_ATTACK_DURATION_MS;
+
+        if (isInAttackAnim) {
+          // Stand completely still while the attack animation plays out
+        } else {
+          // Walk toward player using the smaller collision rects for angle calc
+          const ang = angle(rectCenter(enemyCollRect(enemy)), rectCenter(playerCollRect(state.player)));
+          enemy.x += Math.cos(ang) * enemy.speed * dt;
+          enemy.y += Math.sin(ang) * enemy.speed * dt;
+
+          // Trigger attack only when hitboxes are actually touching and cooldown is done
+          if (
+            rectsOverlap(enemyRect(enemy), playerRect(state.player)) &&
+            now - enemy.lastAttackTime >= enemy.attackCooldown
+          ) {
+            enemy.lastAttackTime = now;
+            damagePlayer(state, 8);
+          }
+        }
+      } else {
+        // ── Default AI (bats, standard enemies) ──────────────────────────────
+        const ang = angle(rectCenter(enemyRect(enemy)), rectCenter(playerRect(state.player)));
+        enemy.x += Math.cos(ang) * enemy.speed * dt;
+        enemy.y += Math.sin(ang) * enemy.speed * dt;
+
+        // Melee: attack whenever the enemy rect overlaps the player rect
+        if (rectsOverlap(enemyRect(enemy), playerRect(state.player))) {
+          const now = Date.now();
+          if (now - enemy.lastAttackTime >= enemy.attackCooldown) {
+            enemy.lastAttackTime = now;
+            damagePlayer(state, 8);
+          }
         }
       }
     } else {
@@ -753,7 +780,9 @@ function startRoomTransition(state: GameState, doorway: Doorway): void {
   const destRoom = state.rooms.get(toRoomKey);
   if (destRoom?.roomType === 'hallway') {
     if (destRoom.hallwayDir === 'horizontal') {
-      entryY = ROOM_HEIGHT / 2;
+      // Horizontal hallway: y corridor runs rows 3–7 (tiles), yMin = 3*TILE_SIZE+4+PLAYER_SPRITE_H = 184
+      // ROOM_HEIGHT/2 = 160 is below yMin, so use corridor midpoint instead
+      entryY = 3 * TILE_SIZE + 4 + PLAYER_SPRITE_H + 10; // = 194, safely inside [184, 220]
       entryX = doorway.side === 'east' ? xPadding : ROOM_WIDTH - xPadding;
     } else {
       entryX = ROOM_WIDTH / 2;

@@ -297,13 +297,15 @@ function createSkeletonBoss(): Enemy {
     id: `enemy-${enemyIdCounter++}`,
     x: 240, y: 160,
     hp: 400, maxHp: 400, speed: 28, aggro: false,
-    lastAttackTime: 0, attackCooldown: 1000,
+    // cooldown > SKEL_ATTACK_DURATION_MS (~1444 ms) so there is a walk-in gap between swings
+    lastAttackTime: 0, attackCooldown: 2500,
     waypoint: null, waypointPauseUntil: 0,
     appearance: getNpcAppearance('skeleton-boss', '#c8e8ff'),
     damageFlashTime: 0, dead: false, deathTime: 0,
     dropItemId: 'godhead', enemyType: 'boss',
     isBoss: true, bossName: 'Bone Lord',
     spriteType: 'skeleton',
+    hasBeenHit: false,
   };
 }
 
