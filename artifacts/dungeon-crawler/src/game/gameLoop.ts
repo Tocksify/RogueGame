@@ -79,16 +79,25 @@ export const ENEMY_SPRITE_H  = 84;
 export const NPC_SPRITE_W    = 32;
 export const NPC_SPRITE_H    = 32;
 
-// Collision box dimensions — trimmed to match the visible body, not the full frame.
-export const PLAYER_HITBOX_W = 36; // narrowed width (centred on sprite)
-export const PLAYER_HITBOX_H = 74; // full height (feet up through head; sprite is 84 px tall)
+// ── Hitbox dimensions (damage + door triggers) ───────────────────────────────
+// Covers the full visible body so hits / door triggers feel fair.
+export const PLAYER_HITBOX_W = 36;
+export const PLAYER_HITBOX_H = 74; // feet up through head (sprite is 84 px tall)
 export const ENEMY_HITBOX_W  = 36;
 export const ENEMY_HITBOX_H  = 74;
 export const NPC_HITBOX_W    = 20;
 export const NPC_HITBOX_H    = 22;
 
+// ── Collision box dimensions (physical movement blocking only) ────────────────
+// Smaller than the hitbox so the player can get close enough to attack / talk.
+export const PLAYER_COLL_W = 16;
+export const PLAYER_COLL_H = 24; // just the lower body / legs
+export const ENEMY_COLL_W  = 16;
+export const ENEMY_COLL_H  = 24;
+
 export interface Rect { x: number; y: number; w: number; h: number; }
 
+// Hitbox rects — used for damage detection and door triggers
 export function playerRect(p: { x: number; y: number }): Rect {
   return { x: p.x - PLAYER_HITBOX_W / 2, y: p.y - PLAYER_HITBOX_H, w: PLAYER_HITBOX_W, h: PLAYER_HITBOX_H };
 }
@@ -97,6 +106,15 @@ export function enemyRect(e: { x: number; y: number }): Rect {
 }
 export function npcRect(n: { x: number; y: number }): Rect {
   return { x: n.x - NPC_HITBOX_W / 2, y: n.y - NPC_HITBOX_H, w: NPC_HITBOX_W, h: NPC_HITBOX_H };
+}
+
+// Collision rects — smaller boxes used only for movement blocking (walls, enemies, NPCs).
+// Keeping these small lets the player get close enough to attack and interact.
+export function playerCollRect(p: { x: number; y: number }): Rect {
+  return { x: p.x - PLAYER_COLL_W / 2, y: p.y - PLAYER_COLL_H, w: PLAYER_COLL_W, h: PLAYER_COLL_H };
+}
+export function enemyCollRect(e: { x: number; y: number }): Rect {
+  return { x: e.x - ENEMY_COLL_W / 2, y: e.y - ENEMY_COLL_H, w: ENEMY_COLL_W, h: ENEMY_COLL_H };
 }
 export function rectCenter(r: Rect): Vector2 {
   return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
@@ -297,15 +315,15 @@ export function update(
     // Axis-separated collision: try full move, then X-only, then Y-only.
     // This lets the player slide along enemies/NPCs instead of getting stuck.
     function collidesWithEnemies(px: number, py: number): boolean {
-      const pr = playerRect({ x: px, y: py });
+      const pr = playerCollRect({ x: px, y: py });
       for (const enemy of room!.enemies) {
         if (enemy.dead) continue;
-        if (rectsOverlap(pr, enemyRect(enemy))) return true;
+        if (rectsOverlap(pr, enemyCollRect(enemy))) return true;
       }
       return false;
     }
     function collidesWithNpcs(px: number, py: number): boolean {
-      const pr = playerRect({ x: px, y: py });
+      const pr = playerCollRect({ x: px, y: py });
       for (const npc of room!.npcs) {
         if (rectsOverlap(pr, npcRect(npc))) return true;
       }
@@ -483,8 +501,8 @@ export function update(
       }
     }
 
-    // Push-apart: keep enemy rect from overlapping player rect.
-    const mtv = getRectMTV(playerRect(state.player), enemyRect(enemy));
+    // Push-apart: use smaller collision rects so enemies don't block from too far away.
+    const mtv = getRectMTV(playerCollRect(state.player), enemyCollRect(enemy));
     if (mtv) {
       enemy.x += mtv.x;
       enemy.y += mtv.y;
@@ -728,7 +746,7 @@ function startRoomTransition(state: GameState, doorway: Doorway): void {
   // xPadding only needs to clear wallPadding (36).
   // yPadding must also clear HITBOX_OFFSET_Y (36) because player.y is feet and
   // yMin = wallPadding + HITBOX_OFFSET_Y = 72; spawning below that locks movement.
-  const xPadding = 48;
+  const xPadding = 56; // must be > xMin (PLAYER_SPRITE_W/2 + 8 = 50) so player spawns in-bounds
   const yPadding = 96; // must be > yMin (PLAYER_SPRITE_H + 8 = 92) so player spawns in-bounds
 
   // For hallway rooms, spawn player in the corridor center

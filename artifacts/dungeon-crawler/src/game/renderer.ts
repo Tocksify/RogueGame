@@ -3,7 +3,7 @@ import { drawSprite, PLAYER_APPEARANCE } from './sprite';
 import { drawPlayerSprite } from './playerSprite';
 import { drawBat, drawSkeleton, SKEL_ROW_WALK, SKEL_ROW_ATTACK, SKEL_ROW_HURT, SKEL_ROW_DIE, SKEL_ROW_IDLE } from './enemySprite';
 import { roomKey, ROOM_WIDTH, ROOM_HEIGHT, TILE_SIZE, ITEMS, RARITY_COLORS } from './world';
-import { playerRect, enemyRect, npcRect } from './gameLoop';
+import { playerRect, enemyRect, npcRect, playerCollRect, enemyCollRect } from './gameLoop';
 
 // ── TILESET ────────────────────────────────────────────────────────────
 let tilesetImg: HTMLImageElement | null = null;
@@ -604,7 +604,7 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
       ctx.restore();
     }
 
-    // NPC hitbox (green rectangle matching sprite bounds)
+    // NPC hitbox (green — damage / interaction zone)
     {
       const nr = npcRect(npc);
       ctx.save();
@@ -685,7 +685,7 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
       ctx.strokeRect(bx, by, bw, bh);
     }
 
-    // Enemy hitbox (red rectangle matching sprite bounds)
+    // Enemy hitbox (red — damage zone) + collision box (orange — movement blocking)
     {
       const er = enemyRect(enemy);
       ctx.save();
@@ -694,6 +694,14 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
       ctx.strokeStyle = 'rgba(255, 60, 60, 0.7)';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(er.x, er.y, er.w, er.h);
+      ctx.restore();
+    }
+    {
+      const ec = enemyCollRect(enemy);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 160, 40, 0.85)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(ec.x, ec.y, ec.w, ec.h);
       ctx.restore();
     }
   }
@@ -717,7 +725,7 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
     state.time,
   );
 
-  // Player hitbox — always visible, semi-transparent blue rectangle
+  // Player hitbox (blue — damage + door triggers) + collision box (yellow — movement blocking)
   {
     const pr = playerRect(state.player);
     ctx.save();
@@ -726,6 +734,14 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
     ctx.strokeStyle = 'rgba(68, 170, 255, 0.7)';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(pr.x, pr.y, pr.w, pr.h);
+    ctx.restore();
+  }
+  {
+    const pc = playerCollRect(state.player);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 230, 40, 0.9)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(pc.x, pc.y, pc.w, pc.h);
     ctx.restore();
   }
 
