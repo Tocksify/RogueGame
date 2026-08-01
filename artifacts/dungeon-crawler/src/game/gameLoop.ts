@@ -81,9 +81,9 @@ export const NPC_SPRITE_H    = 32;
 
 // Collision box dimensions — trimmed to match the visible body, not the full frame.
 export const PLAYER_HITBOX_W = 36; // narrowed width (centred on sprite)
-export const PLAYER_HITBOX_H = 52; // shorter height (lower ~60% of sprite, from feet up to chest)
+export const PLAYER_HITBOX_H = 74; // full height (feet up through head; sprite is 84 px tall)
 export const ENEMY_HITBOX_W  = 36;
-export const ENEMY_HITBOX_H  = 52;
+export const ENEMY_HITBOX_H  = 74;
 export const NPC_HITBOX_W    = 20;
 export const NPC_HITBOX_H    = 22;
 
@@ -729,7 +729,7 @@ function startRoomTransition(state: GameState, doorway: Doorway): void {
   // yPadding must also clear HITBOX_OFFSET_Y (36) because player.y is feet and
   // yMin = wallPadding + HITBOX_OFFSET_Y = 72; spawning below that locks movement.
   const xPadding = 48;
-  const yPadding = 80; // >= wallPadding(36) + HITBOX_OFFSET_Y(36) + buffer(8)
+  const yPadding = 96; // must be > yMin (PLAYER_SPRITE_H + 8 = 92) so player spawns in-bounds
 
   // For hallway rooms, spawn player in the corridor center
   const destRoom = state.rooms.get(toRoomKey);
