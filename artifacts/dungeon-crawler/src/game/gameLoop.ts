@@ -70,6 +70,8 @@ const PROVIDENCE_RADIUS = 220;
 // ── Sprite-rect hitboxes ─────────────────────────────────────────────────────
 // All sprites are bottom-anchored (.y = feet). These return the AABB in world
 // space used for collision detection, attack hits, and hitbox visualisation.
+// The draw size is 84×84 for players/enemies, but the actual body is narrower,
+// so hitbox width is trimmed to the visible torso/body width.
 export const PLAYER_SPRITE_W = 84;
 export const PLAYER_SPRITE_H = 84;
 export const ENEMY_SPRITE_W  = 84;
@@ -77,16 +79,24 @@ export const ENEMY_SPRITE_H  = 84;
 export const NPC_SPRITE_W    = 32;
 export const NPC_SPRITE_H    = 32;
 
+// Collision box dimensions — narrower than the full frame to match the body.
+export const PLAYER_HITBOX_W = 36; // trimmed width (centred on sprite)
+export const PLAYER_HITBOX_H = 84; // full sprite height
+export const ENEMY_HITBOX_W  = 36;
+export const ENEMY_HITBOX_H  = 84;
+export const NPC_HITBOX_W    = 20;
+export const NPC_HITBOX_H    = 32;
+
 export interface Rect { x: number; y: number; w: number; h: number; }
 
 export function playerRect(p: { x: number; y: number }): Rect {
-  return { x: p.x - PLAYER_SPRITE_W / 2, y: p.y - PLAYER_SPRITE_H, w: PLAYER_SPRITE_W, h: PLAYER_SPRITE_H };
+  return { x: p.x - PLAYER_HITBOX_W / 2, y: p.y - PLAYER_HITBOX_H, w: PLAYER_HITBOX_W, h: PLAYER_HITBOX_H };
 }
 export function enemyRect(e: { x: number; y: number }): Rect {
-  return { x: e.x - ENEMY_SPRITE_W / 2, y: e.y - ENEMY_SPRITE_H, w: ENEMY_SPRITE_W, h: ENEMY_SPRITE_H };
+  return { x: e.x - ENEMY_HITBOX_W / 2, y: e.y - ENEMY_HITBOX_H, w: ENEMY_HITBOX_W, h: ENEMY_HITBOX_H };
 }
 export function npcRect(n: { x: number; y: number }): Rect {
-  return { x: n.x - NPC_SPRITE_W / 2, y: n.y - NPC_SPRITE_H, w: NPC_SPRITE_W, h: NPC_SPRITE_H };
+  return { x: n.x - NPC_HITBOX_W / 2, y: n.y - NPC_HITBOX_H, w: NPC_HITBOX_W, h: NPC_HITBOX_H };
 }
 export function rectCenter(r: Rect): Vector2 {
   return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
