@@ -67,6 +67,52 @@ const DOOR_THRESHOLD = 56;
 const DOORWAY_HALF_WIDTH = 40; // half-width of the door opening in pixels
 const PROVIDENCE_RADIUS = 220;
 
+// ── Sprite-rect hitboxes ─────────────────────────────────────────────────────
+// All sprites are bottom-anchored (.y = feet). These return the AABB in world
+// space used for collision detection, attack hits, and hitbox visualisation.
+export const PLAYER_SPRITE_W = 84;
+export const PLAYER_SPRITE_H = 84;
+export const ENEMY_SPRITE_W  = 84;
+export const ENEMY_SPRITE_H  = 84;
+export const NPC_SPRITE_W    = 32;
+export const NPC_SPRITE_H    = 32;
+
+export interface Rect { x: number; y: number; w: number; h: number; }
+
+export function playerRect(p: { x: number; y: number }): Rect {
+  return { x: p.x - PLAYER_SPRITE_W / 2, y: p.y - PLAYER_SPRITE_H, w: PLAYER_SPRITE_W, h: PLAYER_SPRITE_H };
+}
+export function enemyRect(e: { x: number; y: number }): Rect {
+  return { x: e.x - ENEMY_SPRITE_W / 2, y: e.y - ENEMY_SPRITE_H, w: ENEMY_SPRITE_W, h: ENEMY_SPRITE_H };
+}
+export function npcRect(n: { x: number; y: number }): Rect {
+  return { x: n.x - NPC_SPRITE_W / 2, y: n.y - NPC_SPRITE_H, w: NPC_SPRITE_W, h: NPC_SPRITE_H };
+}
+export function rectCenter(r: Rect): Vector2 {
+  return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+}
+function rectsOverlap(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+// Minimum translation vector to push `b` out of `a`. Returns null when not overlapping.
+function getRectMTV(a: Rect, b: Rect): Vector2 | null {
+  if (!rectsOverlap(a, b)) return null;
+  const ox1 = (a.x + a.w) - b.x;   // push b rightward
+  const ox2 = (b.x + b.w) - a.x;   // push b leftward
+  const oy1 = (a.y + a.h) - b.y;   // push b downward
+  const oy2 = (b.y + b.h) - a.y;   // push b upward
+  const mx = ox1 < ox2 ? ox1 : -ox2;
+  const my = oy1 < oy2 ? oy1 : -oy2;
+  return Math.abs(mx) < Math.abs(my) ? { x: mx, y: 0 } : { x: 0, y: my };
+}
+// Closest point on `rect` to point `p` (used for attack-range checks on large sprites).
+function closestPointOnRect(rect: Rect, p: Vector2): Vector2 {
+  return {
+    x: Math.max(rect.x, Math.min(p.x, rect.x + rect.w)),
+    y: Math.max(rect.y, Math.min(p.y, rect.y + rect.h)),
+  };
+}
+
 function distance(a: Vector2, b: Vector2): number {
   const dx = a.x - b.x;
   const dy = a.y - b.y;
@@ -206,21 +252,20 @@ export function update(
   if (!room) return;
 
   // Determine movement bounds (narrowed for hallways).
-  // Bounds are in player.y (feet) coordinates. The hitbox center is at
-  // (player.x, player.y - HITBOX_OFFSET_Y), so we shift y bounds up by HITBOX_OFFSET_Y
-  // so that the hitbox center stays wallPadding away from every wall.
-  const wallPadding = PLAYER_HITBOX_RADIUS + 16; // = 36
-  let xMin = wallPadding, xMax = ROOM_WIDTH - wallPadding;
-  let yMin = wallPadding + HITBOX_OFFSET_Y;               // hitbox center north limit
-  let yMax = ROOM_HEIGHT - wallPadding + HITBOX_OFFSET_Y; // hitbox center south limit
+  // Bounds are in player.y (feet) / player.x (centre) coordinates.
+  // We keep the sprite rect fully inside the walkable tile area.
+  const xHalf = PLAYER_SPRITE_W / 2 + 8; // centre must be this far from side walls (50 px)
+  let xMin = xHalf, xMax = ROOM_WIDTH - xHalf;
+  let yMin = PLAYER_SPRITE_H + 8; // feet so top-of-sprite clears the top wall (92 px)
+  let yMax = ROOM_HEIGHT - 8;     // feet so sprite clears the bottom wall (312 px)
 
   if (room.roomType === 'hallway') {
     if (room.hallwayDir === 'horizontal') {
-      yMin = Math.max(wallPadding + HITBOX_OFFSET_Y, 3 * TILE_SIZE + 4 + HITBOX_OFFSET_Y);
-      yMax = Math.min(ROOM_HEIGHT - wallPadding + HITBOX_OFFSET_Y, 7 * TILE_SIZE - 4 + HITBOX_OFFSET_Y);
+      yMin = Math.max(yMin, 3 * TILE_SIZE + 4 + PLAYER_SPRITE_H);
+      yMax = Math.min(yMax, 7 * TILE_SIZE - 4);
     } else {
-      xMin = Math.max(wallPadding, 6 * TILE_SIZE + 4);
-      xMax = Math.min(ROOM_WIDTH - wallPadding, 9 * TILE_SIZE - 4);
+      xMin = Math.max(xMin, 6 * TILE_SIZE + 4 + PLAYER_SPRITE_W / 2);
+      xMax = Math.min(xMax, 9 * TILE_SIZE - 4 - PLAYER_SPRITE_W / 2);
     }
   }
 
@@ -242,17 +287,17 @@ export function update(
     // Axis-separated collision: try full move, then X-only, then Y-only.
     // This lets the player slide along enemies/NPCs instead of getting stuck.
     function collidesWithEnemies(px: number, py: number): boolean {
-      const pc = { x: px, y: py - HITBOX_OFFSET_Y };
-      for (const enemy of room.enemies) {
+      const pr = playerRect({ x: px, y: py });
+      for (const enemy of room!.enemies) {
         if (enemy.dead) continue;
-        if (distance(pc, enemyCenter(enemy)) < PLAYER_HITBOX_RADIUS + ENEMY_HITBOX_RADIUS) return true;
+        if (rectsOverlap(pr, enemyRect(enemy))) return true;
       }
       return false;
     }
     function collidesWithNpcs(px: number, py: number): boolean {
-      const pc = { x: px, y: py - HITBOX_OFFSET_Y };
-      for (const npc of room.npcs) {
-        if (distance(pc, npcCenter(npc)) < PLAYER_HITBOX_RADIUS + NPC_HITBOX_RADIUS) return true;
+      const pr = playerRect({ x: px, y: py });
+      for (const npc of room!.npcs) {
+        if (rectsOverlap(pr, npcRect(npc))) return true;
       }
       return false;
     }
@@ -307,8 +352,8 @@ export function update(
   // NPC interaction
   state.nearbyNpc = null;
   for (const npc of room.npcs) {
-    const dist = distance(playerCenter(state.player), npcCenter(npc));
-    if (dist < 45) {
+    const dist = distance(rectCenter(playerRect(state.player)), rectCenter(npcRect(npc)));
+    if (dist < 60) {
       state.nearbyNpc = npc.id;
       if (input.isKeyDown('f')) {
         if (npc.isShopkeeper) {
@@ -387,7 +432,6 @@ export function update(
   // Enemy AI
   for (const enemy of room.enemies) {
     if (enemy.dead) continue;
-    const distToPlayer = distance(enemyCenter(enemy), playerCenter(state.player));
     // Enemies only aggro after the player lands a hit on them
     if (enemy.hasBeenHit && !enemy.aggro) {
       sfxEnemyAlert();
@@ -395,11 +439,12 @@ export function update(
     }
 
     if (enemy.aggro) {
-      const ang = angle(enemyCenter(enemy), playerCenter(state.player));
+      const ang = angle(rectCenter(enemyRect(enemy)), rectCenter(playerRect(state.player)));
       enemy.x += Math.cos(ang) * enemy.speed * dt;
       enemy.y += Math.sin(ang) * enemy.speed * dt;
 
-      if (distToPlayer < 28) {
+      // Melee: attack whenever the enemy rect overlaps the player rect
+      if (rectsOverlap(enemyRect(enemy), playerRect(state.player))) {
         const now = Date.now();
         if (now - enemy.lastAttackTime >= enemy.attackCooldown) {
           enemy.lastAttackTime = now;
@@ -428,18 +473,11 @@ export function update(
       }
     }
 
-    // Push-apart: never let an enemy occupy the same space as the player.
-    // After every move, if they overlap, push the enemy back out.
-    const MIN_DIST = PLAYER_HITBOX_RADIUS + ENEMY_HITBOX_RADIUS;
-    const postDist = distance(enemyCenter(enemy), playerCenter(state.player));
-    if (postDist < MIN_DIST && postDist > 0.01) {
-      const pushAng = angle(playerCenter(state.player), enemyCenter(enemy)); // away from player
-      const overlap = MIN_DIST - postDist;
-      enemy.x += Math.cos(pushAng) * overlap;
-      enemy.y += Math.sin(pushAng) * overlap;
-    } else if (postDist <= 0.01) {
-      // Exactly on top — push in a fixed direction to avoid NaN
-      enemy.x += MIN_DIST;
+    // Push-apart: keep enemy rect from overlapping player rect.
+    const mtv = getRectMTV(playerRect(state.player), enemyRect(enemy));
+    if (mtv) {
+      enemy.x += mtv.x;
+      enemy.y += mtv.y;
     }
   }
 
@@ -546,10 +584,17 @@ function performPlayerAttack(state: GameState, canvasWidth: number, canvasHeight
 
   for (const enemy of room.enemies) {
     if (enemy.dead) continue;
-    const dist = distance(playerCenter(state.player), enemyCenter(enemy));
+    const pc = rectCenter(playerRect(state.player));
+    const ec = rectCenter(enemyRect(enemy));
+    // Use closest point on enemy rect for distance — large sprites are hittable from their edges
+    const closest = closestPointOnRect(enemyRect(enemy), pc);
+    const dist = distance(pc, closest);
     if (dist > ATTACK_RANGE) continue;
 
-    const angleToEnemy = angle(playerCenter(state.player), enemyCenter(enemy));
+    // Arc direction: centre-to-centre for a stable angle (avoids NaN when overlapping)
+    const angleToEnemy = (Math.abs(ec.x - pc.x) < 0.01 && Math.abs(ec.y - pc.y) < 0.01)
+      ? attackAngle
+      : angle(pc, ec);
     let angleDiff = Math.abs(angleToEnemy - attackAngle);
     if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
 

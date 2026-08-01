@@ -1,33 +1,49 @@
 # Dungeon Crawler
 
-A top-down dungeon crawler game built with React/Vite and an Express API backend.
+A top-down dungeon crawler game with a React/Vite frontend and an Express API backend, organized as a pnpm monorepo.
 
 ## Stack
 
-- **Frontend** (`artifacts/dungeon-crawler`): React + Vite + TypeScript, Tailwind CSS, game canvas rendered via HTML Canvas
-- **Backend** (`artifacts/api-server`): Express 5, Drizzle ORM, pino logging
-- **Monorepo**: pnpm workspaces
+- **Frontend** (`artifacts/dungeon-crawler`): React 19, Vite, TypeScript, Tailwind CSS, canvas-based game engine
+- **Backend** (`artifacts/api-server`): Express 5, TypeScript, Pino logging
+- **Package manager**: pnpm (workspaces)
 
 ## Running the project
 
-Both workflows are pre-configured in Replit:
+Two workflows run the project:
 
-- **Dungeon Crawler (web)** — `pnpm --filter @workspace/dungeon-crawler run dev` — game frontend, preview at port 21601
-- **API Server** — `pnpm --filter @workspace/api-server run dev` — REST API, runs on port 8080
+| Workflow | Command | Port |
+|---|---|---|
+| `artifacts/dungeon-crawler: web` | `pnpm --filter @workspace/dungeon-crawler run dev` | 21601 |
+| `artifacts/api-server: API Server` | `pnpm --filter @workspace/api-server run dev` | 8080 |
 
-To install dependencies after pulling changes:
+The Replit artifact system injects `PORT` automatically — no manual env var needed for the workflows.
+
+## Game controls
+
+- **WASD / Arrow keys** — move
+- **LMB / num** — attack
+- **E** — inventory
+- **F** — talk / shop
+- **0–num** — use item
+
+## Project structure
+
 ```
-pnpm install
+artifacts/
+  dungeon-crawler/      # React game frontend
+    src/
+      game/             # Core game engine (gameLoop, renderer, sprites, world, etc.)
+      components/       # GameCanvas, MobileControls
+      pages/            # not-found
+  api-server/           # Express REST API
+    src/
+      routes/           # health + index router
+      lib/              # logger (pino)
+lib/                    # Shared workspace libraries
+attached_assets/        # Game sprites and tilesets
 ```
-
-## Asset files
-
-Game assets live at the repo root (not inside `artifacts/`):
-- `Tileset/PNG/` — dungeon floor/wall tileset and animations
-- `OurCharacter/` — player character sprites
-- `RogueEnemies/` — enemy sprite sheets
-- `Idle_new/` — additional character animations
 
 ## User preferences
 
-- Keep existing monorepo structure (pnpm workspaces)
+_None recorded yet._

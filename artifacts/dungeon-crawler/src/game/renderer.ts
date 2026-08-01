@@ -3,7 +3,7 @@ import { drawSprite, PLAYER_APPEARANCE } from './sprite';
 import { drawPlayerSprite } from './playerSprite';
 import { drawBat, drawSkeleton, SKEL_ROW_WALK, SKEL_ROW_ATTACK, SKEL_ROW_HURT, SKEL_ROW_DIE, SKEL_ROW_IDLE } from './enemySprite';
 import { roomKey, ROOM_WIDTH, ROOM_HEIGHT, TILE_SIZE, ITEMS, RARITY_COLORS } from './world';
-import { HITBOX_OFFSET_Y, PLAYER_HITBOX_RADIUS, ENEMY_HITBOX_RADIUS, ENEMY_HITBOX_OFFSET_Y } from './gameLoop';
+import { playerRect, enemyRect, npcRect } from './gameLoop';
 
 // ── TILESET ────────────────────────────────────────────────────────────
 let tilesetImg: HTMLImageElement | null = null;
@@ -603,6 +603,18 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
       ctx.fill();
       ctx.restore();
     }
+
+    // NPC hitbox (green rectangle matching sprite bounds)
+    {
+      const nr = npcRect(npc);
+      ctx.save();
+      ctx.fillStyle = 'rgba(60, 255, 120, 0.18)';
+      ctx.fillRect(nr.x, nr.y, nr.w, nr.h);
+      ctx.strokeStyle = 'rgba(60, 255, 120, 0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(nr.x, nr.y, nr.w, nr.h);
+      ctx.restore();
+    }
   }
 
   // Enemies
@@ -672,6 +684,18 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
       ctx.lineWidth = 1;
       ctx.strokeRect(bx, by, bw, bh);
     }
+
+    // Enemy hitbox (red rectangle matching sprite bounds)
+    {
+      const er = enemyRect(enemy);
+      ctx.save();
+      ctx.fillStyle = 'rgba(255, 60, 60, 0.18)';
+      ctx.fillRect(er.x, er.y, er.w, er.h);
+      ctx.strokeStyle = 'rgba(255, 60, 60, 0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(er.x, er.y, er.w, er.h);
+      ctx.restore();
+    }
   }
 
   // Player flash
@@ -693,18 +717,15 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
     state.time,
   );
 
-  // Player hitbox — always visible, semi-transparent
+  // Player hitbox — always visible, semi-transparent blue rectangle
   {
-    const hx = state.player.x;
-    const hy = state.player.y - HITBOX_OFFSET_Y;
+    const pr = playerRect(state.player);
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(hx, hy, PLAYER_HITBOX_RADIUS, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(68, 170, 255, 0.18)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(68, 170, 255, 0.55)';
+    ctx.fillRect(pr.x, pr.y, pr.w, pr.h);
+    ctx.strokeStyle = 'rgba(68, 170, 255, 0.7)';
     ctx.lineWidth = 1.5;
-    ctx.stroke();
+    ctx.strokeRect(pr.x, pr.y, pr.w, pr.h);
     ctx.restore();
   }
 
