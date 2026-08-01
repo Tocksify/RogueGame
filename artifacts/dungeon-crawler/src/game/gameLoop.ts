@@ -79,13 +79,13 @@ export const ENEMY_SPRITE_H  = 84;
 export const NPC_SPRITE_W    = 32;
 export const NPC_SPRITE_H    = 32;
 
-// Collision box dimensions — narrower than the full frame to match the body.
-export const PLAYER_HITBOX_W = 36; // trimmed width (centred on sprite)
-export const PLAYER_HITBOX_H = 84; // full sprite height
+// Collision box dimensions — trimmed to match the visible body, not the full frame.
+export const PLAYER_HITBOX_W = 36; // narrowed width (centred on sprite)
+export const PLAYER_HITBOX_H = 52; // shorter height (lower ~60% of sprite, from feet up to chest)
 export const ENEMY_HITBOX_W  = 36;
-export const ENEMY_HITBOX_H  = 84;
+export const ENEMY_HITBOX_H  = 52;
 export const NPC_HITBOX_W    = 20;
-export const NPC_HITBOX_H    = 32;
+export const NPC_HITBOX_H    = 22;
 
 export interface Rect { x: number; y: number; w: number; h: number; }
 
