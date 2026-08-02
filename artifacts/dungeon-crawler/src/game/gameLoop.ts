@@ -516,12 +516,7 @@ export function update(
       }
     }
 
-    // Push-apart: use smaller collision rects so enemies don't block from too far away.
-    const mtv = getRectMTV(playerCollRect(state.player), enemyCollRect(enemy));
-    if (mtv) {
-      enemy.x += mtv.x;
-      enemy.y += mtv.y;
-    }
+    // No push-apart — enemies are fully passable
   }
 
   // Fade damage flash
