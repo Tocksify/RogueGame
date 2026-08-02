@@ -91,6 +91,7 @@ export async function loadEnemySprites(base: string = ''): Promise<void> {
 /**
  * Draw bat centred on (cx, cy) — bottom of sprite at cy (same as player).
  * @param animState  Which animation to play
+ * @param facingLeft When true, mirrors the sprite horizontally
  */
 export function drawBat(
   ctx: CanvasRenderingContext2D,
@@ -99,6 +100,7 @@ export function drawBat(
   time: number,
   alpha = 1,
   animState: BatAnim = 'idle',
+  facingLeft = false,
 ): void {
   const sheet = animState === 'idle'   ? batIdle
               : animState === 'run'    ? batRun
@@ -109,15 +111,19 @@ export function drawBat(
   const anim  = BAT_ANIM[animState];
   const frame = Math.floor(time * anim.fps) % anim.frames;
 
+  const drawX = Math.round(cx);
+  const drawY = Math.round(cy - ENEMY_DRAW_SIZE);
+
   ctx.save();
   ctx.globalAlpha *= alpha;
   ctx.imageSmoothingEnabled = false;
+  ctx.translate(drawX, drawY);
+  if (facingLeft) ctx.scale(-1, 1);
   ctx.drawImage(
     sheet,
     frame * BAT_FRAME_W, 0,
     BAT_FRAME_W, BAT_FRAME_H,
-    Math.round(cx - ENEMY_DRAW_SIZE / 2),
-    Math.round(cy - ENEMY_DRAW_SIZE),
+    -ENEMY_DRAW_SIZE / 2, 0,
     ENEMY_DRAW_SIZE, ENEMY_DRAW_SIZE,
   );
   ctx.restore();
@@ -126,7 +132,8 @@ export function drawBat(
 // ── Skeleton draw ─────────────────────────────────────────────────────────────
 /**
  * Draw skeleton centred on (cx, cy) — bottom of sprite at cy (same as player).
- * @param anim  Which animation to play: 'attack' | 'die' | 'walk' | 'idle'
+ * @param anim       Which animation to play: 'attack' | 'die' | 'walk' | 'idle'
+ * @param facingLeft When true, mirrors the sprite horizontally
  */
 export function drawSkeleton(
   ctx: CanvasRenderingContext2D,
@@ -135,19 +142,25 @@ export function drawSkeleton(
   time: number,
   alpha = 1,
   anim: SkelAnim = 'idle',
+  facingLeft = false,
 ): void {
   if (!skelSheet?.naturalWidth) return;
   const cfg   = SKEL_ANIM[anim];
   const frame = Math.floor(time * cfg.fps) % cfg.frames;
+
+  const drawX = Math.round(cx);
+  const drawY = Math.round(cy - ENEMY_DRAW_SIZE);
+
   ctx.save();
   ctx.globalAlpha *= alpha;
   ctx.imageSmoothingEnabled = false;
+  ctx.translate(drawX, drawY);
+  if (facingLeft) ctx.scale(-1, 1);
   ctx.drawImage(
     skelSheet,
     frame * SKEL_FRAME_W, cfg.row * SKEL_FRAME_H,
     SKEL_FRAME_W, SKEL_FRAME_H,
-    Math.round(cx - ENEMY_DRAW_SIZE / 2),
-    Math.round(cy - ENEMY_DRAW_SIZE),
+    -ENEMY_DRAW_SIZE / 2, 0,
     ENEMY_DRAW_SIZE, ENEMY_DRAW_SIZE,
   );
   ctx.restore();

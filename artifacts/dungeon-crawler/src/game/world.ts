@@ -289,6 +289,8 @@ function createBatEnemy(x: number, y: number): Enemy {
     damageFlashTime: 0, dead: false, deathTime: 0,
     dropItemId: 'health-potion', enemyType: 'standard',
     spriteType: 'bat',
+    hasBeenHit: false,
+    facingLeft: false,
   };
 }
 

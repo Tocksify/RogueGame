@@ -81,13 +81,13 @@ export const NPC_SPRITE_W    = 32;
 export const NPC_SPRITE_H    = 32;
 
 // ── Hitbox dimensions (damage + door triggers) ───────────────────────────────
-// Covers the full visible body so hits / door triggers feel fair.
-export const PLAYER_HITBOX_W = 36;
-export const PLAYER_HITBOX_H = 74; // feet up through head (sprite is 84 px tall)
-export const ENEMY_HITBOX_W  = 36;
-export const ENEMY_HITBOX_H  = 74;
-export const NPC_HITBOX_W    = 20;
-export const NPC_HITBOX_H    = 22;
+// Matches the full sprite dimensions so hits feel fair and visually consistent.
+export const PLAYER_HITBOX_W = 84;
+export const PLAYER_HITBOX_H = 84; // full sprite size
+export const ENEMY_HITBOX_W  = 84;
+export const ENEMY_HITBOX_H  = 84;
+export const NPC_HITBOX_W    = 32;
+export const NPC_HITBOX_H    = 32;
 
 // ── Collision box dimensions (physical movement blocking only) ────────────────
 // Smaller than the hitbox so the player can get close enough to attack / talk.
@@ -481,6 +481,8 @@ export function update(
           const ang = angle(rectCenter(enemyCollRect(enemy)), rectCenter(playerCollRect(state.player)));
           enemy.x += Math.cos(ang) * enemy.speed * dt;
           enemy.y += Math.sin(ang) * enemy.speed * dt;
+          // Update facing direction for sprite mirroring
+          enemy.facingLeft = Math.cos(ang) < 0;
 
           // Trigger attack only when hitboxes are actually touching and cooldown is done
           if (
@@ -496,6 +498,8 @@ export function update(
         const ang = angle(rectCenter(enemyRect(enemy)), rectCenter(playerRect(state.player)));
         enemy.x += Math.cos(ang) * enemy.speed * dt;
         enemy.y += Math.sin(ang) * enemy.speed * dt;
+        // Update facing direction for sprite mirroring
+        enemy.facingLeft = Math.cos(ang) < 0;
 
         // Melee: attack whenever the enemy rect overlaps the player rect
         if (rectsOverlap(enemyRect(enemy), playerRect(state.player))) {
@@ -524,6 +528,8 @@ export function update(
           const ang = angle(enemy, enemy.waypoint);
           enemy.x += Math.cos(ang) * (enemy.speed * 0.4) * dt;
           enemy.y += Math.sin(ang) * (enemy.speed * 0.4) * dt;
+          // Update facing direction even while idle-wandering
+          enemy.facingLeft = Math.cos(ang) < 0;
         }
       }
     }

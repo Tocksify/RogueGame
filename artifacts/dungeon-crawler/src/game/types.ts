@@ -115,6 +115,8 @@ export interface Enemy {
   spriteType?: 'bat' | 'skeleton';
   // Aggro-on-hit: enemy only chases/attacks after the player has landed a hit on it
   hasBeenHit?: boolean;
+  // Direction the sprite is facing — used to mirror the sprite sheet horizontally
+  facingLeft?: boolean;
 }
 
 export interface NPC {

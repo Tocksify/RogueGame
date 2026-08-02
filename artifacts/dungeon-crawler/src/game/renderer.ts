@@ -69,10 +69,11 @@ function drawEnemySprite(
   time: number,
   alpha = 1,
 ): void {
+  const facingLeft = enemy.facingLeft ?? false;
   if (enemy.spriteType === 'bat') {
-    drawBat(ctx, enemy.x, enemy.y, time, alpha, batAnim(enemy));
+    drawBat(ctx, enemy.x, enemy.y, time, alpha, batAnim(enemy), facingLeft);
   } else if (enemy.spriteType === 'skeleton') {
-    drawSkeleton(ctx, enemy.x, enemy.y, time, alpha, skelAnim(enemy));
+    drawSkeleton(ctx, enemy.x, enemy.y, time, alpha, skelAnim(enemy), facingLeft);
   } else {
     ctx.save();
     ctx.globalAlpha *= alpha;
@@ -607,10 +608,10 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
     {
       const nr = npcRect(npc);
       ctx.save();
-      ctx.fillStyle = 'rgba(60, 255, 120, 0.18)';
+      ctx.fillStyle = 'rgba(60, 255, 120, 0.35)';
       ctx.fillRect(nr.x, nr.y, nr.w, nr.h);
-      ctx.strokeStyle = 'rgba(60, 255, 120, 0.7)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(60, 255, 120, 1.0)';
+      ctx.lineWidth = 2;
       ctx.strokeRect(nr.x, nr.y, nr.w, nr.h);
       ctx.restore();
     }
@@ -688,18 +689,18 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
     {
       const er = enemyRect(enemy);
       ctx.save();
-      ctx.fillStyle = 'rgba(255, 60, 60, 0.18)';
+      ctx.fillStyle = 'rgba(255, 60, 60, 0.35)';
       ctx.fillRect(er.x, er.y, er.w, er.h);
-      ctx.strokeStyle = 'rgba(255, 60, 60, 0.7)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(255, 60, 60, 1.0)';
+      ctx.lineWidth = 2;
       ctx.strokeRect(er.x, er.y, er.w, er.h);
       ctx.restore();
     }
     {
       const ec = enemyCollRect(enemy);
       ctx.save();
-      ctx.strokeStyle = 'rgba(255, 160, 40, 0.85)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(255, 160, 40, 1.0)';
+      ctx.lineWidth = 2;
       ctx.strokeRect(ec.x, ec.y, ec.w, ec.h);
       ctx.restore();
     }
@@ -728,18 +729,18 @@ function drawRoom(ctx: CanvasRenderingContext2D, state: GameState, room: Room): 
   {
     const pr = playerRect(state.player);
     ctx.save();
-    ctx.fillStyle = 'rgba(68, 170, 255, 0.18)';
+    ctx.fillStyle = 'rgba(68, 170, 255, 0.35)';
     ctx.fillRect(pr.x, pr.y, pr.w, pr.h);
-    ctx.strokeStyle = 'rgba(68, 170, 255, 0.7)';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(68, 170, 255, 1.0)';
+    ctx.lineWidth = 2;
     ctx.strokeRect(pr.x, pr.y, pr.w, pr.h);
     ctx.restore();
   }
   {
     const pc = playerCollRect(state.player);
     ctx.save();
-    ctx.strokeStyle = 'rgba(255, 230, 40, 0.9)';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(255, 230, 40, 1.0)';
+    ctx.lineWidth = 2;
     ctx.strokeRect(pc.x, pc.y, pc.w, pc.h);
     ctx.restore();
   }
