@@ -81,20 +81,21 @@ export const NPC_SPRITE_W    = 32;
 export const NPC_SPRITE_H    = 32;
 
 // ── Hitbox dimensions (damage + door triggers) ───────────────────────────────
-// Matches the full sprite dimensions so hits feel fair and visually consistent.
-export const PLAYER_HITBOX_W = 84;
-export const PLAYER_HITBOX_H = 84; // full sprite size
-export const ENEMY_HITBOX_W  = 84;
+// Full sprite height, but narrowed horizontally to the visible body width so the
+// hitbox doesn't clip into hallway walls or trigger overlap checks too early.
+export const PLAYER_HITBOX_W = 52;
+export const PLAYER_HITBOX_H = 84; // full sprite height
+export const ENEMY_HITBOX_W  = 52;
 export const ENEMY_HITBOX_H  = 84;
 export const NPC_HITBOX_W    = 32;
 export const NPC_HITBOX_H    = 32;
 
 // ── Collision box dimensions (physical movement blocking only) ────────────────
-// Smaller than the hitbox so the player can get close enough to attack / talk.
-export const PLAYER_COLL_W = 16;
-export const PLAYER_COLL_H = 24; // just the lower body / legs
-export const ENEMY_COLL_W  = 16;
-export const ENEMY_COLL_H  = 24;
+// Torso-sized box — large enough to feel solid, centred on the visible body.
+export const PLAYER_COLL_W = 36;
+export const PLAYER_COLL_H = 56; // feet up through mid-torso
+export const ENEMY_COLL_W  = 36;
+export const ENEMY_COLL_H  = 56;
 
 export interface Rect { x: number; y: number; w: number; h: number; }
 
