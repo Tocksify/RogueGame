@@ -314,36 +314,17 @@ export function update(
     const newX = state.player.x + moveDir.x * state.player.speed * dt;
     const newY = state.player.y + moveDir.y * state.player.speed * dt;
 
-    // Axis-separated collision: try full move, then X-only, then Y-only.
-    // This lets the player slide along enemies/NPCs instead of getting stuck.
-    function collidesWithEnemies(px: number, py: number): boolean {
-      const pr = playerCollRect({ x: px, y: py });
-      for (const enemy of room!.enemies) {
-        if (enemy.dead) continue;
-        if (rectsOverlap(pr, enemyCollRect(enemy))) return true;
-      }
-      return false;
-    }
-    function collidesWithNpcs(px: number, py: number): boolean {
-      const pr = playerCollRect({ x: px, y: py });
-      for (const npc of room!.npcs) {
-        if (rectsOverlap(pr, npcRect(npc))) return true;
-      }
-      return false;
-    }
     function inBounds(px: number, py: number): boolean {
       return px >= xMin && px <= xMax && py >= yMin && py <= yMax;
     }
 
-    // Try full move
-    if (inBounds(newX, newY) && !collidesWithEnemies(newX, newY) && !collidesWithNpcs(newX, newY)) {
+    // Wall-only collision — enemies and NPCs are passable
+    if (inBounds(newX, newY)) {
       state.player.x = newX;
       state.player.y = newY;
-    // Slide along Y (X blocked)
-    } else if (inBounds(state.player.x, newY) && !collidesWithEnemies(state.player.x, newY) && !collidesWithNpcs(state.player.x, newY)) {
+    } else if (inBounds(state.player.x, newY)) {
       state.player.y = newY;
-    // Slide along X (Y blocked)
-    } else if (inBounds(newX, state.player.y) && !collidesWithEnemies(newX, state.player.y) && !collidesWithNpcs(newX, state.player.y)) {
+    } else if (inBounds(newX, state.player.y)) {
       state.player.x = newX;
     }
 
